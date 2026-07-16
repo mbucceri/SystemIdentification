@@ -2,23 +2,23 @@ from __future__ import annotations
 
 import numpy as np
 import matplotlib.pyplot as plt
+from trajectories import multisine_trajectory
 from scipy.optimize import least_squares
+import simulation.params_system as SystemParams 
+import simulation.params_model as ModelParams
 
 
 # ============================================================
 # Adapt these imports to your actual project names
 # ============================================================
-import sys
-import os
-sys.path.append(os.path.relpath("../"))
-from simulation.ground_truth_simulation import (
+from simulation.sim_ground_truth import (
     VerticalJointParams,
     VerticalJointState,
     VerticalPrismaticJointSimulator,
     motor_to_linear_gain,
 )
 
-from simulation.simplified_simulation import (
+from simulation.sim_simplified import (
     SimplifiedVerticalJointParams,
     SimplifiedVerticalJointState,
     SimplifiedVerticalPrismaticJointSimulator,
@@ -50,119 +50,95 @@ def holding_current_ground_truth(params: VerticalJointParams) -> float:
     )
 
 
-def smooth_start_envelope(t: np.ndarray, ramp_time: float) -> np.ndarray:
-    """
-    Smooth envelope from 0 to 1 to avoid exciting the system
-    with an artificial discontinuity at t = 0.
-    """
-    envelope = np.ones_like(t)
-
-    ramp_mask = t < ramp_time
-    tau = t[ramp_mask] / ramp_time
-
-    envelope[ramp_mask] = 0.5 * (1.0 - np.cos(np.pi * tau))
-
-    return envelope
-
-
-def generate_current_excitation(
-    t: np.ndarray,
-    bias_current: float,
-    amplitude: float,
-    current_min: float,
-    current_max: float,
-) -> np.ndarray:
-    """
-    Multisine current excitation around a bias current.
-
-    The signal contains low and medium frequencies so that the model
-    can observe slow gravity/friction effects and acceleration effects.
-
-    Output:
-        desired current command [A] for the ground-truth model.
-    """
-
-    # Frequencies in Hz. Keep them moderate for a first test.
-    freqs = np.array([0.2, 0.5, 0.9, 1.7, 2.8, 4.0])
-
-    phases = np.array([0.0, 1.1, 2.2, 0.7, 1.9, 2.8])
-
-    signal = np.zeros_like(t)
-
-    for f, phi in zip(freqs, phases):
-        signal += np.sin(2.0 * np.pi * f * t + phi)
-
-    # Normalize to approximately [-1, 1]
-    signal /= np.max(np.abs(signal))
-
-    envelope = smooth_start_envelope(t, ramp_time=0.5)
-
-    current = bias_current + envelope * amplitude * signal
-
-    current = np.clip(current, current_min, current_max)
-
-    return current
+#def generate_current_excitation(
+#    t: np.ndarray,
+#    bias_current: float,
+#    amplitude: float,
+#    current_min: float,
+#    current_max: float,
+#) -> np.ndarray:
+#    """
+#    Multisine current excitation around a bias current.
+#
+#    The signal contains low and medium frequencies so that the model
+#    can observe slow gravity/friction effects and acceleration effects.
+#
+#    Output:
+#        desired current command [A] for the ground-truth model.
+#    """
+#
+#    # Frequencies in Hz. Keep them moderate for a first test.
+#    freqs_phases = np.array([(0.2, 0.0), (0.5, 1.1), (0.9, 2.2), (1.7, 0.7), (2.8, 1.9), (4.0, 2.8)])
+#    current = multisine_trajectory.generate_current_excitation(
+#        t=t,
+#        freqs_and_phases=freqs_phases,
+#        bias_current=bias_current,
+#        amplitude=amplitude,
+#        ramp_time=1.0,
+#        current_min=current_min,
+#        current_max=current_max,
+#    )
+#
+#    return current
 
 
 # ============================================================
 # Ground truth data generation
 # ============================================================
 
-def build_ground_truth_params() -> VerticalJointParams:
+
     """
-    Configure the detailed model.
-
-    Replace these values with the tuned values you are currently using.
-    """
-    params = VerticalJointParams()
-
-    params.system.dt = 1e-3
-    params.system.gravity = 9.80665
-
-    params.controller.latency_ms = 3.0
-    params.controller.kp = 20.0
-    params.controller.ki = 500.0
-    params.controller.voltage_limit = 48.0
-
-    params.motor.torque_constant = 0.08
-    params.motor.back_emf_constant = 0.08
-    params.motor.rotor_inertia = 2.0e-4
-    params.motor.winding_resistance = 1.2
-    params.motor.winding_inductance = 1.5e-3
-
-    params.gearbox.reduction_ratio = 25.0
-    params.gearbox.inertia_motor_side = 1.0e-4
-    params.gearbox.viscous_friction = 1.0e-4
-    params.gearbox.coulomb_friction = 0.02
-
-    params.screw.pitch = 0.005
-    params.screw.viscous_friction_linear = 30.0
-    params.screw.coulomb_friction_linear = 15.0
-    params.screw.inertia_motor_side = 0.0
-
-    params.end_effector.mass = 4.0
-
-    params.encoders.linear_encoder_noise_std = 2.0e-5
-    params.encoders.motor_encoder_noise_std = 1.0e-4
-
-    return params
-
+#def build_ground_truth_params() -> VerticalJointParams:
+#    Configure the detailed model.
+#
+#    Replace these values with the tuned values you are currently using.
+#    # """
+#    params = VerticalJointParams()
+# 
+#    params.system.dt = 1e-3
+#    params.system.gravity = 9.80665
+#    params.controller.latency_ms = 3.0
+#    params.controller.kp = 20.0
+#    params.controller.ki = 500.0
+#    params.controller.voltage_limit = 48.0
+#    params.motor.torque_constant = 0.08
+#    params.motor.back_emf_constant = 0.08
+#    params.motor.rotor_inertia = 2.0e-4
+#    params.motor.winding_resistance = 1.2
+#    params.motor.winding_inductance = 1.5e-3
+#    params.gearbox.reduction_ratio = 25.0
+#    params.gearbox.inertia_motor_side = 1.0e-4
+#    params.gearbox.viscous_friction = 1.0e-4
+#    params.gearbox.coulomb_friction = 0.02
+#    params.screw.pitch = 0.005
+#    params.screw.viscous_friction_linear = 30.0
+#    params.screw.coulomb_friction_linear = 15.0
+#    params.screw.inertia_motor_side = 0.0
+#    params.end_effector.mass = 4.0
+#    params.encoders.linear_encoder_noise_std = 2.0e-5
+#    params.encoders.motor_encoder_noise_std = 1.0e-4
+#    return params
 
 def generate_ground_truth_dataset() -> dict:
-    gt_params = build_ground_truth_params()
 
-    dt = gt_params.system.dt
+    dt = SystemParams.SystemParams.dt
     t_end = 10.0
     t = np.arange(0.0, t_end, dt)
 
-    i_hold = holding_current_ground_truth(gt_params)
+    # i_hold = holding_current_ground_truth(gt_params)
+    i_hold = 0.4  # A reasonable guess for the holding current. You can adjust this value based on your system.
 
     print(f"Estimated holding current: {i_hold:.6f} A")
 
-    desired_current = generate_current_excitation(
+    # Frequencies in Hz. Keep them moderate for a first test.
+    freqs_phases = np.array([(0.2, 0.0), (0.5, 1.1), (0.9, 2.2), (1.7, 0.7), (2.8, 1.9), (4.0, 2.8)])
+
+    desired_current = multisine_trajectory.generate_current_excitation(
         t=t,
+        freqs_and_phases=freqs_phases,
         bias_current=i_hold,
         amplitude=1.5,
+        ramp_time=1.0,
         current_min=-3.0,
         current_max=3.0,
     )
@@ -175,7 +151,7 @@ def generate_ground_truth_dataset() -> dict:
     )
 
     sim = VerticalPrismaticJointSimulator(
-        params=gt_params,
+        params=VerticalJointParams(),
         initial_state=initial_state,
         seed=10,
     )
@@ -186,7 +162,7 @@ def generate_ground_truth_dataset() -> dict:
     data["desired_current"] = desired_current
 
     return {
-        "params": gt_params,
+        #v"params": gt_params,
         "data": data,
     }
 
@@ -195,8 +171,7 @@ def generate_ground_truth_dataset() -> dict:
 # Simplified model setup
 # ============================================================
 
-def ideal_current_force_gain_from_ground_truth(
-    gt_params: VerticalJointParams,
+def ideal_current_force_gain_from_plate_data(
     efficiency: float = 1.0,
 ) -> float:
     """
@@ -213,17 +188,16 @@ def ideal_current_force_gain_from_ground_truth(
         Kf = Kt * N * eta * 2*pi / pitch
     """
     return (
-        gt_params.motor.torque_constant
-        * gt_params.gearbox.reduction_ratio
+        ModelParams.MotorParams.torque_constant
+        * ModelParams.GearboxParams.reduction_ratio
         * efficiency
         * 2.0
         * np.pi
-        / gt_params.screw.pitch
+        / ModelParams.LinearScrewParams.pitch
     )
 
 
-def build_simplified_params_from_ground_truth(
-    gt_params: VerticalJointParams,
+def build_simplified_params_from_plate_data(
 ) -> SimplifiedVerticalJointParams:
     """
     Fixed configuration of the simplified model.
@@ -232,26 +206,25 @@ def build_simplified_params_from_ground_truth(
     """
     params = SimplifiedVerticalJointParams()
 
-    params.system.dt = gt_params.system.dt
-    params.system.gravity = gt_params.system.gravity
+    # params.system.dt = SystemParams.SystemParams.dt
+    # params.system.gravity = SystemParams.SystemParams.gravity
 
-    params.kinematics.gearbox_reduction_ratio = gt_params.gearbox.reduction_ratio
-    params.kinematics.screw_pitch = gt_params.screw.pitch
+    # params.kinematics.gearbox_reduction_ratio = ModelParams.GearboxParams.reduction_ratio
+    # params.kinematics.screw_pitch = ModelParams.LinearScrewParams.pitch
 
-    # Some initial nominal values.
-    params.dynamics.equivalent_mass = gt_params.end_effector.mass
-    params.dynamics.load_mass = gt_params.end_effector.mass
-    params.dynamics.current_force_gain = ideal_current_force_gain_from_ground_truth(
-        gt_params,
-        efficiency=0.8,
-    )
-    params.dynamics.viscous_friction = 20.0
-    params.dynamics.coulomb_friction = 10.0
-    params.dynamics.friction_smoothing_velocity = 1.0e-4
+    # # Some initial nominal values.
+    # params.dynamics.load_mass = 0.85*ModelParams.LinearScrewParams.load_mass  # [kg]
+    # params.dynamics.equivalent_mass = 0.85* ModelParams.LinearScrewParams.equivalent_mass  # [kg]
+    # params.dynamics.current_force_gain = ideal_current_force_gain_from_plate_data(
+    #     efficiency=0.8,
+    # )
+    # params.dynamics.viscous_friction = 0.8 * ModelParams.LinearScrewParams.viscous_friction_linear
+    # params.dynamics.coulomb_friction = 0.8 * ModelParams.LinearScrewParams.coulomb_friction_linear
+    # params.dynamics.friction_smoothing_velocity = 1.0e-4
 
-    # For identification, usually do not add noise in the simplified model.
-    params.encoders.linear_encoder_noise_std = 0.0
-    params.encoders.motor_encoder_noise_std = 0.0
+    # # For identification, usually do not add noise in the simplified model.
+    # params.encoders.linear_encoder_noise_std = 0.0
+    # params.encoders.motor_encoder_noise_std = 0.0
 
     return params
 
@@ -399,7 +372,7 @@ def main() -> None:
     # --------------------------------------------------------
     gt = generate_ground_truth_dataset()
 
-    gt_params = gt["params"]
+    # gt_params = gt["params"]
     gt_data = gt["data"]
 
     t = gt_data["time"]
@@ -416,7 +389,7 @@ def main() -> None:
     # --------------------------------------------------------
     # 2. Build simplified model base params
     # --------------------------------------------------------
-    simplified_params = build_simplified_params_from_ground_truth(gt_params)
+    simplified_params = build_simplified_params_from_plate_data()
 
     theta_initial = params_to_theta(simplified_params)
 
@@ -438,9 +411,9 @@ def main() -> None:
 
     upper_bounds = np.array(
         [
-            100.0,      # equivalent_mass [kg]
+            100000.0,    # equivalent_mass [kg]
             10000.0,    # current_force_gain [N/A]
-            1000.0,     # viscous_friction [N s/m]
+            10000.0,     # viscous_friction [N s/m]
             1000.0,     # coulomb_friction [N]
         ],
         dtype=float,
@@ -461,7 +434,7 @@ def main() -> None:
         ),
         x_scale=np.array([5.0, 2000.0, 50.0, 20.0]),
         verbose=2,
-        max_nfev=100,
+        max_nfev=100, 
     )
 
     theta_identified = result.x

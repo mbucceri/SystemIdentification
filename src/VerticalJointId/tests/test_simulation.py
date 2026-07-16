@@ -2,20 +2,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import os
-sys.path.append(os.path.relpath("../"))
-from simulation import simplified_simulation as ssim
+from simulation import sim_simplified as ssim
+from trajectories import sin_trajectory
 
 sparams = ssim.SimplifiedVerticalJointParams()
-sparams.system.dt = 1e-3
+# sparams.system.dt = 1e-3
 # sparams.controller.latency_ms = 3.0
 
-sparams.dynamics.equivalent_mass = 7.0
-sparams.dynamics.load_mass = 7.0
-sparams.kinematics.gearbox_reduction_ratio = 25.0
-sparams.kinematics.screw_pitch = 0.010
+# sparams.dynamics.equivalent_mass = 7.0
+# sparams.dynamics.load_mass = 7.0
+# sparams.kinematics.gearbox_reduction_ratio = 25.0
+# sparams.kinematics.screw_pitch = 0.010
 
-sparams.encoders.motor_encoder_noise_std = 1e-4
-sparams.encoders.linear_encoder_noise_std = 1e-5
+# sparams.encoders.motor_encoder_noise_std = 1e-4
+# sparams.encoders.linear_encoder_noise_std = 1e-5
 
 sVerticalJointSim = ssim.SimplifiedVerticalPrismaticJointSimulator(sparams)
 
@@ -23,12 +23,8 @@ t_end = 3.0
 dt = sparams.system.dt
 t = np.arange(0.0, t_end, dt)
 
-# Simple current profile: upward command, then lower command
-#desired_current = np.zeros_like(t)
-#desired_current[(t > 0.2) & (t < 1.5)] = 2.0
-#desired_current[(t >= 1.5) & (t < 2.5)] = 0.5
-desired_current = 2*np.sin(2*np.pi*t)
-
+# Simple sinusoidal current profile
+desired_current = sin_trajectory.generate_sin_trajectory(t, amplitude=2.0, frequency=0.5, phase=0.0)
 
 data = sVerticalJointSim.simulate(desired_current)
 

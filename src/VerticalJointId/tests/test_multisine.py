@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from simulation import sim_ground_truth as gtsim
-from trajectories import sin_trajectory 
+from trajectories import multisine_trajectory 
 
 gtparams = gtsim.VerticalJointParams()
 # gtparams.system.dt = 1e-3
@@ -20,12 +20,18 @@ t_end = 3.0
 dt = gtparams.system.dt
 t = np.arange(0.0, t_end, dt)
 
-# Simple current profile: upward command, then lower command
-#desired_current = np.zeros_like(t)
-#desired_current[(t > 0.2) & (t < 1.5)] = 2.0
-#desired_current[(t >= 1.5) & (t < 2.5)] = 0.5
-# desired_current = 0.45+sin_trajectory.generate_sin_trajectory(t, amplitude=2.0, frequency=2.0, phase=0.0)
-desired_current = sin_trajectory.generate_sin_trajectory(t, amplitude=2.0, frequency=0.5, phase=0.0)
+freqs_phases = np.array([(0.2, 0.0), (0.5, 1.1), (0.9, 2.2), (1.7, 0.7), (2.8, 1.9), (4.0, 2.8)])
+# freqs_phases = np.array([(0.2, 0.0), (0.5, 0.0), (0.9, 0.0), (1.7, 0.0), (2.8, 0), (4.0, 0)])
+# freqs_phases = np.array([(0.2, 0.0)])
+desired_current = multisine_trajectory.generate_current_excitation(
+    t=t,
+    freqs_and_phases=freqs_phases,
+    bias_current=0.4,
+    amplitude=2.0,
+    ramp_time=1.0,
+    current_min=-3.0,
+    current_max=3.0
+)
 
 data = gtVerticalJointSim.simulate(desired_current)
 
