@@ -1,1022 +1,788 @@
 # PSDM System Identification Workflow (Student Guide)
 
-This document is the **student-oriented companion** to `workflow_detailed.md`. Both guides share the same chapter structure so you can cross-reference them section by section.
-
-| This guide (`workflow_detailed_student.md`) | Engineer guide (`workflow_detailed.md`) |
-|---------------------------------------------|----------------------------------------|
-| Explains *why* and *how* with examples | States *what* must be done concisely |
-| Includes MATLAB/Python snippets | Lists outputs and gates |
-| Appendices teach prerequisite math | Assumes familiarity |
-
-**How to use this document:** Read each phase in order. Do not skip Phase 0. When you see a box labeled **Practical procedure**, follow it literally before moving on. When you see **Cross-reference**, open the matching section in `workflow_detailed.md` for the formal requirement list.
-
----
+> Proposed revision. This guide integrates actuator-to-joint coordinate conversion, prismatic-axis conventions, joint-local direction semantics, and URDF-to-DH automation boundaries.
 
 ## Purpose and scope
 
+This is the student-oriented companion to `workflow_detailed_proposed_revised.md`. Both documents use the same phase structure.
+
+| This guide | Engineering guide |
+|---|---|
+| Explains why each activity is required and provides examples. | Defines required inputs, outputs, gates, and acceptance evidence. |
+| Includes small MATLAB and configuration snippets. | Avoids training material unless required to execute the process. |
+| Adds supporting appendices. | Assumes the reader already knows the underlying mathematics. |
+
 ### What you are building
 
-You are building a **digital twin**: a numerical model that predicts joint torques from joint motion. The twin is expressed in **regressor form**:
+You are building a numerical digital twin that predicts generalized joint effort from **link-side joint motion**:
 
-```
+```text
 tau_i = yp(q, qdot, qddot) * P_i * theta_b
 ```
 
 | Symbol | Meaning |
-|--------|---------|
-| `q`, `qdot`, `qddot` | Joint position, velocity, acceleration (vectors, size `n x 1`) |
-| `yp` | Row vector of basis functions evaluated at the current motion state (size `1 x p`) |
-| `P_i` | Reduction matrix for joint `i` (size `p x l`) |
-| `theta_b` | Base inertial parameters to identify (size `l x 1`) |
-| `tau_i` | Predicted torque at joint `i` |
+|---|---|
+| `q`, `qdot`, `qddot` | Link-side generalized position, velocity, and acceleration. `q` is rad for a revolute joint and m for a prismatic joint. |
+| `yp` | PSDM basis-function row evaluated at a joint state. |
+| `P_i` | PSDM reduction matrix for joint `i`. |
+| `theta_b` | Base inertial parameter vector. |
+| `tau_i` | Generalized effort. Nm for a revolute joint and N for a prismatic joint. |
 
-The PSDM toolbox computes `E` and `P` from robot kinematics. Your job in Phases 3 and 4 is to collect data and solve for `theta_b`.
+The raw motor-drive encoder count is **not** PSDM `q`.
 
-### What PSDM does vs what you do
+### The coordinate path you must implement
 
-```
-  YOU provide                    PSDM provides              YOU identify
-  ---------                      -------------              --------------
-  URDF, DH table, g      -->     E, P matrices      -->     theta_b
-  Robot logs (q, i)      -->     (regressor eval)   -->     from regression
+```text
+raw drive count c  ->  motor coordinate phi  ->  link-side q  ->  PSDM
+raw motor current i ->  generalized effort tau_meas           ->  regression
 ```
 
-**Cross-reference:** `workflow_detailed.md`, Purpose and scope.
+The PSDM toolbox derives `E` and `P` from robot kinematics. Your work is to make the physical data and the kinematic model use the same joint coordinate definition before fitting `theta_b`.
 
-**In scope:** serial chains, motor-current torque measurement, four-step calibration from the Denso application paper.
+**In scope:** rigid serial chains, revolute and prismatic joints, current-derived effort labels, and the sequential calibration structure used in the Denso PSDM study.
 
-**Out of scope:** flexible joints, backlash, unmodeled cable effects.
+**Out of scope:** flexible joints, backlash, compliance, unmodeled cable forces, and contact/process forces.
 
----
+### Why the new distinction matters
+
+A gearbox may rotate the motor 100 revolutions while the robot link rotates one revolution. Feeding the motor angle to PSDM would make PSDM evaluate `sin(phi)` where the robot geometry requires `sin(q)`. No choice of DH sign `s_i = +1` or `-1` can correct that scale error. The raw telemetry must first become the link-side coordinate.
 
 ## Authoritative sources
 
-Read these in this order when learning:
+Use the sources in this order:
 
-1. **PSDM-README.pdf** (start here for MATLAB usage).
-2. **Lloyd et al. application preprint** (Denso robot, experimental calibration walkthrough).
-3. **Lloyd et al. (2021)** (full PSDM theory; read Section 3 when you need deeper understanding).
-4. **`critical_ambiguities.md`** (before touching real data).
+1. **PSDM-README.pdf**, for the MATLAB calling syntax and PSDM DH convention.
+2. **Lloyd et al. Denso application preprint**, for the experimental calibration sequence.
+3. **Lloyd et al. (2021)**, for the PSDM theory and the treatment of revolute and prismatic coordinates.
+4. **`critical_ambiguities.md`**, for existing decision gates around effort scaling and time derivatives.
+5. **The checked-out `CarletonABL/PSDM` source**, for function behavior and dimensions.
 
-Keep PDFs open while working in MATLAB. Use `help PSDM.deriveModel` for function-level documentation.
-
----
+The examples in this guide are implementation illustrations. Values such as sign, ratio, encoder reference, and ball-screw lead must come from the robot evidence, not from the example.
 
 ## Prerequisites
 
-### Software setup (first-time install)
+### Software setup
 
-**Step 1: Install MATLAB** (R2018a or newer).
+**Step 1: install MATLAB** R2018a or newer.
 
-**Step 2: Clone PSDM and add to path.**
+**Step 2: clone PSDM and add it to the MATLAB path.**
 
 ```bash
 git clone https://github.com/CarletonABL/PSDM.git
 ```
 
-In MATLAB:
-
 ```matlab
 addpath(genpath('/path/to/PSDM'));
-savepath;   % optional: persist across sessions
-help PSDM.deriveModel   % should print help text, not error
+help PSDM.deriveModel
 ```
 
-**Step 3 (optional but recommended):** Compile MEX files for speed.
+**Step 3, optional:** compile PSDM MEX functions when MATLAB Coder and a supported compiler are available.
 
 ```matlab
 PSDM.make();
-% Edit +PSDM/config.m: set use_mex = true;
 ```
 
-**Step 4: Install Python 3** with `numpy`, `scipy`, and `yourdfpy` or `urdfpy` for URDF parsing in Phase 1.
+**Step 4:** install Python only if you will implement the proposed URDF-chain and FK-validation helper. A URDF library selection is a separate implementation decision.
 
-### Hardware checklist
+### Hardware evidence checklist
 
-Before any experiment, confirm you have:
+Before logging data, collect:
 
-- [ ] URDF file matching the physical robot.
-- [ ] Motor datasheet `Kt` values (units: Nm/A at motor shaft).
-- [ ] Gear ratio per joint (motor revolutions per joint revolution).
-- [ ] Sign convention documentation from the drive firmware team.
-- [ ] Safe joint/velocity/torque limits from the robot manual.
+- [ ] URDF matching the selected physical robot and tool configuration.
+- [ ] Encoder scale for each actuator.
+- [ ] Gearbox definition, including which side is numerator and which side is denominator.
+- [ ] Ball-screw lead for every prismatic axis.
+- [ ] Encoder count at the selected physical kinematic zero.
+- [ ] Motor torque constant and signed-current convention.
+- [ ] Joint position, velocity, acceleration, and effort limits.
+- [ ] Robot base orientation and gravity direction.
 
-### Required artifacts before Phase 3
+### Project files to create
 
-**Cross-reference:** `workflow_detailed.md`, Prerequisites.
-
-Create a project folder:
-
-```
+```text
 project/
   conventions_sheet.md
+  actuator_to_joint_map.yaml
+  actuator_effort_conversion_notes.md
+  dh_table.csv
   dh_table.mat
-  kt_conversion_notes.md      (after Checkpoint A)
-  derivative_filter_config.yaml (after Checkpoint B)
+  fk_validation_report.md
   raw_logs/
   processed_data/
   matlab/
 ```
 
----
+`actuator_to_joint_map.yaml` is required because `conventions_sheet.md` is readable by people but does not by itself provide the exact numeric telemetry transformation.
 
-## Phase 0: Scope and conventions lock
+## Phase 0: Coordinate, sign, and telemetry contract lock
 
-**Goal:** Every later step fails if frames and signs are inconsistent. This phase prevents silent errors (wrong torque sign, inverted gear ratio, gravity pointing the wrong way).
+**Goal:** define one canonical coordinate system that is shared by the URDF comparison, the DH table, and the PSDM regression dataset.
 
-**Cross-reference:** `workflow_detailed.md`, Phase 0.
+### Step 0.1: Understand the three coordinate layers
 
-### Step 0.1: Define coordinate conventions
+For every axis, keep these names separate:
 
-#### What you need to understand
+| Layer | Symbol | Example unit | Meaning |
+|---|---|---|---|
+| Drive telemetry | `c_i` | encoder counts | What the motor drive reports. |
+| Motor shaft | `phi_i` | rad | Motor angle after count-to-angle conversion. |
+| Kinematic joint | `q_i` | rad or m | Link-side generalized coordinate supplied to PSDM. |
 
-A **reference frame** is an origin plus three orthogonal axes. The URDF, DH table, telemetry, and PSDM model must all describe the same physical robot using compatible frames.
+A motor-side count is only equal to a kinematic joint coordinate when there is no transmission and the units already match. Your robot has transmissions, therefore you must implement the conversion.
 
-**Gravity in PSDM:** `g` is a **unit vector** (length 1) pointing **upward**, opposite to gravity. If your base frame has `+Z` pointing up, use:
+### Step 0.2: Define frames, gravity, and the reference posture
+
+A reference frame is an origin and three orthogonal axes. The URDF, DH table, telemetry conversion, and PSDM model must all use compatible definitions.
+
+PSDM `g` is a unit vector pointing upward, opposite gravity. If the base frame has `+Z` upward:
 
 ```matlab
 g = [0; 0; 1];
 ```
 
-PSDM multiplies this direction by `9.806132 m/s^2` internally when evaluating gravity terms (`utilities.g` in the toolbox).
+Define and record `q_ref`, the kinematic reference posture. This is normally the posture represented by URDF and DH zero coordinates. Also record encoder counts at that posture.
 
-#### Practical procedure
+### Step 0.3: Fill `conventions_sheet.md`
 
-Create `conventions_sheet.md` using this template:
+Use a joint-local direction. Do not use an end-effector direction in this table.
 
 ```markdown
 # Robot conventions
 
 ## Base frame
-- Origin: [describe, e.g. robot base mounting surface center]
-- +X: [forward / per drawing]
-- +Y: [left / per drawing]
-- +Z: [up]
-- Gravity vector g (unit, upward): [0, 0, 1]
+- Origin: [physical description]
+- +X: [description]
+- +Y: [description]
+- +Z: [description]
+- Gravity vector g, unit and upward: [gx, gy, gz]
+- Reference posture q_ref: [q1_ref, ..., qn_ref]
 
-## Joint table
-| Joint | Type | q unit | +q direction (physical) | i>0 torque direction | Lower | Upper |
-|-------|------|--------|-------------------------|----------------------|-------|-------|
-| 1     | rev  | rad    | CCW when viewed from +Z | CCW                  | -pi   | pi    |
-| ...   |      |        |                         |                      |       |       |
-
-## Tool / payload
-- Tool mass in URDF: [yes/no, value]
-- External tau_ee model: [none / separate wrench]
+## Joint conventions
+| Joint | Type | q unit | +q direction, local physical meaning | Direction frame | q=0 definition | t_i | s_i | Lower | Upper | Positive generalized effort |
+|---|---|---|---|---|---|---:|---:|---:|---:|---|
+| J1 | revolute | rad | Right-hand rotation about +Z_J1 | J1 | [description] | 0 | [±1] | [value] | [value] | [torque convention] |
+| P3 | prismatic | m | Child link translates along +Z_P3 | P3 | [description] | 1 | [±1] | [value] | [value] | [force convention] |
 ```
 
-**Checkpoint:** For each joint, physically move it in the **positive** direction and verify that logged `q` increases.
+#### What `+q direction` means
 
-### Step 0.2: Lock URDF-to-DH policy
+For a revolute joint, `+q` is the positive right-hand rotation about the local joint axis.
 
-#### Background (see also Appendix A)
+For a prismatic joint, `+q` is positive translation of the child link relative to the parent link along the local joint axis.
 
-Denavit-Hartenberg (DH) parameters describe each link with four numbers: `a_i`, `alpha_i`, `d_i`, `theta_i`. PSDM adds two columns:
+For the vertical-slide example, write `child link translates along +Z_P3`. You may add `at q_ref, +Z_P3 aligns with +Z_base`, but only as an optional reference-pose note.
 
-| Column | Name | Value |
-|--------|------|-------|
-| 5 | `t_i` | `0` = revolute, `1` = prismatic |
-| 6 | `s_i` | `+1` or `-1` (joint sign) |
+#### Why not use an end-effector direction?
 
-Effective joint coordinate (PSDM-README Eq. (5)):
+The direction of end-effector motion caused by a joint depends on the robot configuration. For a downstream prismatic joint, the base-frame direction of its local axis depends on preceding joints. You do not need to set other joints to zero to define `+q`. Define it locally. Use `q_ref` only when you want to report an illustrative base-frame direction.
 
-```
-d_i_star    = d_i + t_i * s_i * q_i
-theta_i_star = theta_i + (1 - t_i) * s_i * q_i
-```
+### Step 0.4: Build `actuator_to_joint_map.yaml`
 
-#### Practical procedure
+Example schema:
 
-1. Choose **standard** or **modified** DH. Pick one and never mix them. PSDM follows Spong and Vidyasagar (2008) as cited in PSDM-README.
-2. List joints from base (index 1) to tool (index n).
-3. Write the rule for mapping URDF `<origin xyz rpy>` and `<axis xyz>` into DH rows.
-4. Set acceptance tolerance: position error < 1 mm, orientation error < 0.1 deg in FK check (Phase 1).
+```yaml
+J1:
+  joint_type: revolute
+  encoder_counts_per_motor_rev: 1048576
+  motor_revs_per_output_rev: 100
+  encoder_count_at_q_zero: 123456
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
 
-**Common mistake:** Putting a constant URDF joint offset into `q_i` instead of into fixed `theta_i` or `d_i`. Offsets belong in the DH constants; `q_i` is the measured joint variable.
-
-### Step 0.3: Define data contract for logs
-
-Every log file must contain synchronized columns. Example CSV header:
-
-```
-t, q1, q2, ..., qn, qdot1, ..., qdotn, i1, ..., in
+P3:
+  joint_type: prismatic
+  encoder_counts_per_motor_rev: 1048576
+  motor_revs_per_output_rev: 50
+  screw_lead_m_per_output_rev: 0.005
+  encoder_count_at_q_zero: 654321
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: -1
 ```
 
-If `qdot` is not logged, document that you will compute it in Phase 3 from `q`.
+With:
 
-Store **raw** logs unchanged. Never overwrite them.
+- `C` = encoder counts per motor revolution,
+- `R` = motor revolutions per output-shaft revolution,
+- `L` = screw lead in m per output-shaft revolution,
+- `sigma_enc` = `encoder_to_q_sign`,
 
-### Step 0.4: Execution checklist
+use:
 
-**Cross-reference:** `workflow_detailed.md`, Step 0.4.
-
-Run in MATLAB:
-
-```matlab
-assert(exist('PSDM.deriveModel', 'file') == 2, 'PSDM not on path');
+```text
+revolute:  q = q_offset + sigma_enc * 2*pi*(c-c_ref)/(C*R)
+prismatic: q = q_offset + sigma_enc * L*(c-c_ref)/(C*R)
 ```
 
-**Gate 0:** `conventions_sheet.md` reviewed by someone who knows the physical robot.
+Differentiate the converted `q`, not encoder counts, unless you first apply exactly the same conversion to the derivative signal.
 
----
+Put the encoder-reference offset in this map. Put a fixed URDF/DH transform offset in the DH constants. Do not put the same physical offset in both places.
+
+**[Needs confirmation]** Verify `R` from the hardware/firmware definition. Some documentation uses the reciprocal ratio.
+
+### Step 0.5: Understand `s_i` versus encoder sign
+
+PSDM uses `s_i = +1` or `-1` inside its DH row. It determines whether an increasing canonical `q_i` increases the DH `theta_i` or `d_i` variable.
+
+Your telemetry map uses `encoder_to_q_sign`. It determines whether increasing raw encoder count creates increasing physical canonical `q_i`.
+
+These are not interchangeable. Do not put a gearbox ratio in `s_i`, because `s_i` can only be `+1` or `-1`.
+
+### Step 0.6: Data contract
+
+**Raw file example:**
+
+```text
+t, c1, c2, ..., cn, current1, current2, ..., currentn
+```
+
+**Processed PSDM file example:**
+
+```text
+t, q1, q2, ..., qn, qdot1, ..., qdotn, qddot1, ..., qddotn, tau_meas1, ..., tau_measn
+```
+
+Store raw files unchanged. Add conversion configuration and processed results separately.
+
+### Step 0.7: Gate 0
+
+Before proceeding, verify for each axis:
+
+1. At the reference posture, converted `q` equals the documented reference coordinate.
+2. A small physical positive joint movement produces an increase in canonical `q`.
+3. A positive current produces the documented positive generalized-effort direction, or the opposite relationship is explicitly recorded.
+
+Do not continue while any sign is inferred rather than checked.
 
 ## Phase 1: URDF to PSDM kinematics
 
-**Goal:** Produce `DH` (`n x 6`) and `g` for `PSDM.deriveModel(DH, g)`.
+**Goal:** produce a validated standard-DH table that consumes the canonical link-side `q` from Phase 0.
 
-**Cross-reference:** `workflow_detailed.md`, Phase 1.
+### Step 1.1: Parse the selected URDF chain
 
-### Step 1.1: Parse URDF joint chain
+A URDF describes a tree. PSDM requires the selected serial chain from a base link to a tool link.
 
-#### What is URDF?
+For every actuated joint on that path, extract:
 
-URDF (Unified Robot Description Format) is an XML file. Each movable connection is a `<joint>` with:
+- name,
+- type,
+- parent and child links,
+- origin transform,
+- local axis,
+- limits.
 
-- `type` (`revolute`, `prismatic`, `fixed`, ...),
-- `parent` / `child` link names,
-- `<origin xyz="..." rpy="..."/>` (transform from parent to joint frame),
-- `<axis xyz="..."/>` (rotation or translation axis),
-- `<limit lower="..." upper="..."/>`.
+Fixed joints are not ignored. Their transforms must be folded into the adjacent kinematic relationship and listed in the mapping report.
 
-#### Practical procedure
+**Output:** `urdf_kinematics.json`.
 
-1. Open the URDF in a text editor or URDF viewer.
-2. Build a table from base link to tool link. Skip `fixed` joints but remember their transforms.
-3. Export `urdf_kinematics.json` (or equivalent) with one record per actuated joint.
+### Step 1.2: What a URDF parser can and cannot generate
 
-Example Python sketch (adapt to your parser library):
+A parser can generate a candidate:
 
-```python
-import json
-# from yourdfpy import URDF  # example library
-
-# robot = URDF.load("robot.urdf")
-# chain = robot.actuated_joints  # library-specific
-
-joints = []
-# for j in chain:
-#     joints.append({
-#         "name": j.name,
-#         "type": j.type,
-#         "axis": list(j.axis),
-#         "origin_xyz": list(j.origin.xyz),
-#         "origin_rpy": list(j.origin.rpy),
-#         "lower": j.limit.lower,
-#         "upper": j.limit.upper,
-#     })
-
-# with open("urdf_kinematics.json", "w") as f:
-#     json.dump(joints, f, indent=2)
+```text
+urdf_kinematics.json
+conventions_sheet.draft.md
+dh_candidate.csv
+dh_candidate.mat
+dh_mapping_report.md
 ```
 
-### Step 1.2: Build PSDM DH table
+It cannot finalize the physical conventions because a typical URDF does not know your encoder scale, gearbox ratio, screw lead, encoder reference count, drive current sign, or firmware coordinate conversion.
 
-#### Worked concept (one revolute joint)
+Therefore, the script is a draft generator and FK test tool. It is not an authority that can approve a DH table automatically.
 
-Suppose joint 1 rotates about the parent `Z` axis, with no offset. A common assignment is:
+### Step 1.3: Build the PSDM standard-DH table
 
+PSDM uses the six-column input:
+
+```text
+[a_i, alpha_i, d_i, theta_i, t_i, s_i]
 ```
-a_1 = 0,  alpha_1 = 0,  d_1 = link_length,  theta_1 = 0,  t_1 = 0,  s_1 = 1
+
+with:
+
+```text
+d_i_star     = d_i     + t_i       * s_i * q_i
+theta_i_star = theta_i + (1 - t_i) * s_i * q_i
 ```
 
-If telemetry `q` increases in the opposite direction to the DH convention, set `s_1 = -1` (do not change the measured `q` in logs).
+- `t_i = 0` for revolute joints.
+- `t_i = 1` for prismatic joints.
+- `s_i` is a sign only. It does not contain the gearbox ratio or ball-screw lead.
 
-#### Practical procedure
+Use the standard-DH convention expected by PSDM. Do not put a modified-DH table directly into `PSDM.deriveModel`.
 
-1. For each joint `i`, fill one row of `DH`.
-2. Use radians for angles and meters for lengths.
-3. Save both human-readable and MATLAB formats:
+### Step 1.4: Candidate-generation procedure
+
+1. Select DH frames from the ordered serial chain.
+2. Encode fixed geometry in `a`, `alpha`, `d`, and `theta`.
+3. Assign `t_i` from joint type.
+4. Choose `s_i` so canonical positive `q_i` produces the same local physical joint motion in URDF FK and DH FK.
+5. Do not copy the encoder-reference offset into `d_i` or `theta_i` a second time.
+6. Save the candidate table with joint-name to row mapping.
+
+### Step 1.5: Validate FK
+
+URDF-to-DH conversion is not unique. The proof that the selected table is usable is an FK comparison performed with the same canonical `q` values.
+
+1. Check the reference posture.
+2. Check planned calibration poses.
+3. Check random valid poses.
+4. Compare tool-frame position and orientation.
+5. Investigate mismatch in this order: coordinate offset, encoder map sign, DH sign `s_i`, fixed transforms, frame assignment.
+
+Write results to `fk_validation_report.md`.
+
+### Step 1.6: MATLAB import check
 
 ```matlab
-% Example 2-DOF planar arm (illustrative only)
-DH = [
-    0,  0,     0.3,  0,  0,  1;   % joint 1: a, alpha, d, theta, t, s
-    0.2, 0,    0,    0,  0,  1    % joint 2
-];
-save('dh_table.mat', 'DH');
+S = load('dh_table.mat', 'DH');
+DH = S.DH;
+
+assert(size(DH, 2) == 6);
+assert(all(DH(:,5) == 0 | DH(:,5) == 1));
+assert(all(abs(DH(:,6)) == 1));
 ```
 
-### Step 1.3: Define gravity vector
-
-```matlab
-g = [0; 0; 1];   % if +Z is up in base frame
-```
-
-Verify `norm(g) == 1`. PSDM requires a unit vector.
-
-### Step 1.4: Forward kinematics validation
-
-#### Why this matters
-
-URDF-to-DH is **not unique**. Different textbooks place frame `i` on different links. The only proof your DH table is correct is that it produces the same end-effector pose as the URDF for many `q` samples.
-
-#### Practical procedure
-
-1. Sample `N` configurations (at least 100 random poses within limits).
-2. Compute FK from URDF and from DH (use Robotics Toolbox, Pinocchio, or your own script).
-3. Compare position norm error and orientation error (angle of rotation difference).
-4. If a joint fails repeatedly, fix `s_i` or offset in that row first.
-
-Document results in `fk_validation_report.md`:
-
-```
-Max position error: 0.3 mm
-Max orientation error: 0.05 deg
-Status: PASS (Gate 1)
-```
-
-### Step 1.5: MATLAB import check
-
-```matlab
-load('dh_table.mat', 'DH');
-g = [0; 0; 1];
-
-assert(size(DH, 2) == 6, 'DH must have 6 columns');
-assert(all(DH(:, 5) == 0 | DH(:, 5) == 1), 't_i must be 0 or 1');
-assert(all(abs(DH(:, 6)) == 1), 's_i must be +1 or -1');
-fprintf('DH is %d joints, ready for PSDM.\n', size(DH, 1));
-```
-
-**Gate 1:** FK check passed. Stop if it did not pass.
-
----
+**Gate 1:** FK validation passed. Do not derive a PSDM model before this result exists.
 
 ## Phase 2: PSDM model derivation
 
-**Goal:** Obtain `E` and `P` from kinematics alone (no robot logs needed yet).
+**Goal:** derive `E` and `P` from the approved DH table.
 
-**Cross-reference:** `workflow_detailed.md`, Phase 2. Theory in **Appendix E**.
-
-### Step 2.1: Install and configure PSDM
-
-Already done in Prerequisites. Confirm:
+### Step 2.1: Confirm the PSDM installation
 
 ```matlab
 which PSDM.deriveModel
+help PSDM.deriveModel
 ```
 
-### Step 2.2: Optional inertial parameter mask `X`
+Record the checked-out repository commit hash with every model derivation.
 
-If you **know** some inertial parameters are zero (e.g. negligible products of inertia), build `X` (`n x 10`):
+### Step 2.2: Optional inertial-structure mask `X`
+
+`X` is a structural mask. A zero means that the corresponding inertial term is treated as absent in the derivation. It is not a fitted parameter vector.
 
 ```matlab
 n = size(DH, 1);
-X = ones(n, 10);      % start with all parameters "present"
-X(:, 8:10) = 0;       % example: zero all Ixy, Ixz, Iyz
+X = ones(n, 10);
+X(:, 8:10) = 0;  % Use only when justified by independent evidence.
 ```
 
-Only **exact zeros** matter. Random nonzero placeholders are fine.
+An optional eleventh column may represent drive inertia or drive mass. Use it only after confirming how it is reflected into the output-joint coordinate.
 
 ### Step 2.3: Derive the model
 
 ```matlab
-load('dh_table.mat', 'DH');
-g = [0; 0; 1];
-
 [E, P] = PSDM.deriveModel(DH, g);
-% With mask:
+
+% With a justified structural mask:
 % [E, P] = PSDM.deriveModel(DH, g, X);
 
-DOF = size(DH, 1);
-p = size(E, 2);
-l = size(P, 2);
-fprintf('Derived model: p=%d basis terms, l=%d base parameters.\n', p, l);
-
-save('psdm_model.mat', 'E', 'P', 'DH', 'g', ...
-     'derivation_date', 'datetime("now")', ...
-     'matlab_version', 'version');
+% Gravity-only model for sequential calibration:
+% [E_grav, P_grav] = PSDM.deriveModel(DH, g, [], ...
+%     'gravity_only', true);
 ```
 
-**What happens inside `deriveModel`:** The toolbox separately derives gravity, acceleration, and velocity submodels, then combines them (see `deriveModel.m` in the PSDM repository). This is why you can later extract gravity-only models from the same kinematics.
-
-Derivation may take seconds to minutes depending on DOF and whether MEX/parallel is enabled.
-
-### Step 2.4: Determine base parameter count
+The useful dimensions are:
 
 ```matlab
-fprintf('Base parameter count l = %d (theoretical max 10*n = %d)\n', l, 10*DOF);
+p = size(E, 2);     % retained PSDM basis functions
+ell = size(P, 2);   % full-model base parameters
 ```
 
-Optional: if URDF has nominal masses/inertias, compare structure:
+`P` is a page matrix of size `p x ell x DOF`.
+
+### Step 2.4: Nominal parameter sanity check
+
+When URDF inertial properties are trustworthy enough to use as a nominal reference:
 
 ```matlab
-% X_nominal = ... from URDF
 % Theta_nom = PSDM.X2Theta(E, P, DH, g, X_nominal);
 ```
 
-`Theta_nom` is useful for sanity checks, not as final identified values.
+This does not identify the real robot. It only gives a compatible PSDM parameter vector for a known hypothetical model.
 
 ### Step 2.5: Optional complexity reduction
 
 ```matlab
-% [Eh, Ph] = PSDM.reduceModelComplexity(E, P, DH, g, X);
+% [Eh, Ph] = PSDM.reduceModelComplexity(E, P, DH, g, X, ...
+%     'mode', 'rel_error', 'max_relative_error', 0.001);
 ```
 
-Use only if you need faster runtime and accept some approximation. Keep the full model for identification.
+For prismatic axes, supply appropriate meter-based limits to any reduction study. Do not use angular default limits blindly.
 
-### Sanity test (partial Gate 2)
+### Step 2.6: Sanity test
 
 ```matlab
-Q   = zeros(DOF, 10);
-Qd  = zeros(DOF, 10);
-Qdd = zeros(DOF, 10);
-Theta_test = ones(l, 1);
+n = size(DH, 1);
+Q   = zeros(n, 10);
+Qd  = zeros(n, 10);
+Qdd = zeros(n, 10);
+Theta_test = ones(size(P, 2), 1);
+
 tau = PSDM.inverseDynamics(E, P, Theta_test, Q, Qd, Qdd);
-assert(all(size(tau) == [DOF, 10]), 'inverseDynamics size mismatch');
-disp('PSDM inverseDynamics OK.');
+assert(isequal(size(tau), [n, 10]));
 ```
 
----
+**Gate 2A:** the model evaluates with link-side coordinates in the correct dimensions.
 
-## Phase 3: Real-robot data collection and preprocessing
+## Phase 3: Convert telemetry, collect data, and preprocess
 
-**Goal:** Clean datasets with `q`, `qdot`, `qddot`, `tau_meas`.
+**Goal:** produce clean PSDM inputs `q`, `qdot`, `qddot` and a current-derived generalized-effort label `tau_meas`.
 
-**Cross-reference:** `workflow_detailed.md`, Phase 3. Numerical methods in **Appendices C, D, F, G**.
+### Step 3.1: Convert encoder counts to canonical `q`
 
-### Step 3.1: Resolve `Kt_motor` to `Kt_joint` (Checkpoint A)
-
-#### Physical meaning
-
-Motor current `i` (Amps) is proportional to motor torque `tau_motor`:
-
-```
-tau_motor = Kt_motor * i
-```
-
-The joint feels a transformed torque through the gearbox:
-
-```
-tau_joint = eta * N * tau_motor    (common pattern; verify for your robot)
-```
-
-where `N` is the gear ratio (motor side to joint side) and `eta` is efficiency.
-
-**Cross-reference:** `critical_ambiguities.md`, Ambiguity 1. Worked gear explanation in **Appendix G**.
-
-#### Practical procedure
-
-1. Write the equation your firmware uses (ask the controls team).
-2. Compute `Kt_joint` per joint.
-3. Bench test: hold a known pose, apply small constant velocity, compare gravity trend sign.
+Use `actuator_to_joint_map.yaml` before filtering or regression.
 
 ```matlab
-Kt_joint = [K1; K2; K3; ...];   % Nm/A at joint
-tau_meas = diag(Kt_joint) * i;    % i is n x N matrix of currents
+% Illustrative conversion for a revolute axis.
+q = q_offset + encoder_to_q_sign * ...
+    2*pi*(c - c_ref)/(counts_per_motor_rev*motor_revs_per_output_rev);
 ```
 
-Document in `kt_conversion_notes.md` with numeric example per joint.
-
-### Step 3.2: Design excitation trajectories
-
-Each calibration step needs different motion:
-
-| Step | Speed | What it excites |
-|------|-------|-----------------|
-| Motor `Kt` | Very slow | Current difference with added mass |
-| Gravity | Slow | Gravity regressor columns |
-| Friction | Low to high | Friction vs velocity |
-| Inertial | Fast, rich | `qddot`, Coriolis, centrifugal terms |
-
-**Safety:** Every trajectory must respect joint position, velocity, acceleration, and torque limits.
-
-For inertial data, the Denso paper optimizes multi-sine trajectories to minimize `cond(Y_iner)`. A simpler student approach: use several sinusoids per joint with incommensurate frequencies, then check `cond(Y_iner)` before collecting hours of data.
-
-### Step 3.3: Data logging
-
-1. Log raw `t`, `q`, `i` at full rate.
-2. Log `qdot` if the controller provides it (often cleaner than differentiating `q`).
-3. Never modify raw files.
-
-### Step 3.4: Characterize timing (Checkpoint B)
+For a prismatic ball-screw axis:
 
 ```matlab
-% dt = diff(t);
-% fprintf('dt: mean=%.6f, std=%.6f, min=%.6f, max=%.6f\n', ...
-%     mean(dt), std(dt), min(dt), max(dt));
-
-% Rule of thumb: if std(dt) > 10% of mean(dt), resample to uniform grid.
+q = q_offset + encoder_to_q_sign * ...
+    screw_lead_m_per_output_rev*(c - c_ref) / ...
+    (counts_per_motor_rev*motor_revs_per_output_rev);
 ```
 
-See **Appendix D** for resampling and filtering.
+Use the same scale and sign when converting a drive-provided count-rate signal. Prefer filtering and numerical differentiation after `q` is in rad or m.
 
-### Step 3.5: Resample and filter
+#### Required checks
 
-Example: zero-phase Butterworth low-pass before differentiation (used in the Denso paper):
+- At the reference posture, `q` matches the documented value.
+- At a small positive physical motion, `q` increases.
+- The signal stays within the documented link-side limits.
+
+### Step 3.2: Convert current to generalized effort, Checkpoint A
+
+The Denso paper uses a joint-side effective torque constant. Generalize the notation so it remains correct for a prismatic axis:
+
+```text
+tau_meas_i = Keff_i * i_i
+```
+
+| Joint type | `Keff_i` | `tau_meas_i` |
+|---|---|---|
+| Revolute | Nm/A | Nm |
+| Prismatic | N/A | N |
+
+For a prismatic axis, `Keff` combines motor torque constant, gearbox effect, ball-screw lead, signs, and the documented efficiency policy.
+
+**[Inference]** Under an ideal direct ball-screw transmission, the force scale is proportional to motor torque divided by lead and multiplied by the motor-to-output reduction ratio. The exact equation depends on the ratio definition and mechanical loss policy.
+
+Calibrate or validate the effort scale using a known mass and the equation from the Denso paper:
+
+```text
+diag(Keff) * (i_with_mass - i_nominal) = J(q)^T * f_weight
+```
+
+The Jacobian transpose returns a torque for a revolute row and a force for a prismatic row.
+
+### Step 3.3: Design trajectories
+
+| Activity | Required trajectory property |
+|---|---|
+| Effort-scale calibration | Slow forward and reverse motion, known added mass. |
+| Gravity fit | Slow motion, low inertial effect, outside static friction. |
+| Friction fit | One-axis sinusoids, multiple amplitudes and speeds. |
+| Inertial fit | Rich coordinated acceleration and velocity excitation. |
+
+All trajectory limits must be applied after conversion to canonical rad/m units.
+
+### Step 3.4: Log raw data
+
+1. Log raw timestamps, counts, and signed current at the EtherCAT rate.
+2. Preserve the raw data unchanged.
+3. Verify that current and position use a shared clock. If not, state the interpolation policy.
+
+### Step 3.5: Check timestamps, Checkpoint B
 
 ```matlab
-fs = 1000;          % Hz, example
-fc = 40;            % Hz cutoff (adjust per experiment type)
+dt = diff(t);
+fprintf('mean %.6g, std %.6g, min %.6g, max %.6g
+', ...
+    mean(dt), std(dt), min(dt), max(dt));
+```
+
+Select uniform-grid resampling only when the measured timing quality and derivative bandwidth justify it. Record the decision in `timing_quality_report.md`.
+
+### Step 3.6: Filter and estimate derivatives
+
+Filter link-side `q` or `qdot`, then estimate derivatives. Do not tune a cutoff in encoder-count units.
+
+```matlab
+fs = 1000;        % Example only.
+fc = 40;          % Must be selected from actual signal bandwidth.
 [b, a] = butter(4, fc/(fs/2));
-q_filt = filtfilt(b, a, q, [], 2);   % filter along time (dim 2)
+q_filt = filtfilt(b, a, q, [], 2);
+qdot = gradient(q_filt, 1/fs);
+qddot = gradient(qdot, 1/fs);
 ```
 
-Record `fc`, filter order, and rationale in `derivative_filter_config.yaml`.
+Trim endpoint and filter-transient samples before fitting.
 
-Suggested starting cutoffs from the application preprint:
+### Step 3.7: Split train and validation trajectories
 
-| Experiment | Cutoff (indicative) |
-|------------|---------------------|
-| Motor / gravity | 4 Hz |
-| Inertial | 15 Hz |
-| Friction | 40 Hz |
+Keep complete held-out trajectories. Do not allow samples from the same highly correlated motion record to appear in both fitting and final acceptance datasets.
 
-### Step 3.6: Estimate `qdot` and `qddot`
+**Gate 2B:** coordinate conversion, `Keff`, timing, filtering, and derivative policy are documented and accepted.
 
-**Central difference** (second-order accurate, used in Denso friction paper):
+## Phase 4: Parameter identification
 
-```matlab
-dt = mean(diff(t));
-qdot  = gradient(q, dt);                    % or use logged qdot
-qddot = gradient(qdot, dt);                 % simple option
+**Goal:** identify the full PSDM base parameter vector and any separate friction or actuator-effort parameters.
 
-% Explicit central difference on uniform grid:
-% qdot(:,k)  = (q(:,k+1) - q(:,k-1)) / (2*dt);
-% qddot(:,k) = (qdot(:,k+1) - qdot(:,k-1)) / (2*dt);
-```
+### Helper function: build the full PSDM regressor
 
-Avoid using raw `diff(qdot)/dt` without filtering on noisy data.
-
-Compare two methods, plot spectra, pick the one that gives lower validation error on held-out data.
-
-### Step 3.7: Segment train and validation
+Save as `matlab/build_psdm_regressor.m`:
 
 ```matlab
-N = size(q, 2);
-idx_train = 1:floor(0.85*N);
-idx_val   = (floor(0.85*N)+1):N;
+function Y_stack = build_psdm_regressor(E, P, Q, Qd, Qdd)
+% Q, Qd, Qdd are DOF x N canonical link-side arrays.
 
-save('processed_data/train.mat', 't', 'q', 'qdot', 'qddot', 'tau_meas', 'idx_train');
-save('processed_data/val.mat',   't', 'q', 'qdot', 'qddot', 'tau_meas', 'idx_val');
-```
-
-Label which file is for gravity, friction, or inertial calibration in `dataset_manifest.md`.
-
-**Gate 2:** Timing report and filter config complete.
-
----
-
-## Phase 4: Base parameter identification
-
-**Goal:** Solve for `theta_b` (and optional friction/`Kt` parameters).
-
-**Cross-reference:** `workflow_detailed.md`, Phase 4. Regression math in **Appendix B**. PSDM regressor details in **Appendix E**.
-
-### Helper function: build the full regressor matrix
-
-Save as `matlab/build_psdm_regressor.m`. You will reuse this in Steps 4A.2, 4A.4, and Mode B.
-
-```matlab
-function [Y_stack, Yb] = build_psdm_regressor(E, P, Q, Qd, Qdd)
-% BUILD_PSDM_REGRESSOR  Stack joint regressors for least-squares ID.
-%
-%   Y_stack: (N*DOF) x l  matrix for tau_vec = Y_stack * theta_b
-%   Yb:      DOF x l x N   joint-wise regressor (same as inverseDynamics)
-
-    DOF = size(Q, 1);
-    N   = size(Q, 2);
-    l   = size(P, 2);
-
-    Yp = PSDM.generateYp(Q, Qd, Qdd, E);       % N x p
-    Yb = utilities.blockprod(Yp, P);            % N x l x DOF
-
-    Y_stack = zeros(N * DOF, l);
-    for i = 1:DOF
-        Yi = Yb(:, :, i);                        % N x l
-        rows = i:DOF:(N*DOF);
-        Y_stack(rows, :) = Yi;
-    end
+    Yp = PSDM.generateYp(Q, Qd, Qdd, E);   % N x p
+    Yb = utilities.blockprod(Yp, P);        % N x ell x DOF
+    Y_stack = utilities.vertStack(Yb);      % (N*DOF) x ell
 end
 ```
 
-Usage:
+If `tau` is stored as `DOF x N`, use:
 
 ```matlab
-load('psdm_model.mat', 'E', 'P');
-load('processed_data/train.mat', 'q', 'qdot', 'qddot', 'tau_meas');
-
-[Y_stack, ~] = build_psdm_regressor(E, P, q, qdot, qddot);
-tau_vec = reshape(tau_meas, [], 1);
-theta_b = Y_stack \ tau_vec;   % see Appendix B
+tau_vec = reshape(tau, [], 1);
 ```
 
----
+This has the same sample-then-joint ordering as `utilities.vertStack(Yb)`.
 
-### Mode A: Sequential calibration (recommended)
+### Mode A: Sequential calibration, recommended
 
-Full decomposition (application preprint Eq. (15)):
+Use the physical decomposition:
 
+```text
+tau_meas = tau_psdm + tau_fric + tau_ee
+tau_psdm = tau_grav + tau_iner
 ```
-tau = diag(Kt_joint) * i = tau_grav + tau_fric + tau_iner + tau_ee
-```
 
-Calibrate in order: motor, gravity, friction, inertial. Later steps subtract what earlier steps explain.
+All these terms have per-joint generalized-effort units. They are not all torques in a mixed chain.
 
----
+#### Step 4A.1: Actuator-effort calibration
 
-#### Step 4A.1: Motor calibration (preprint Section 3.1)
+1. Use low-speed sweeps, forward and reverse, with and without a known tool mass.
+2. Fit or validate `Keff`.
+3. Store values in the same joint order as the DH table.
+4. Validate signs and magnitudes on held-out known-load data.
 
-##### Idea
+#### Step 4A.2: Gravity calibration
 
-At very low speed, friction cancels when averaging forward and reverse motion. With and without a known mass on the tool, gravity difference isolates the motor constant.
-
-##### Practical procedure
-
-1. Attach known mass `m_w` at known position on the tool.
-2. Move joint `j` slowly from limit to limit, forward then reverse, with and without mass.
-3. Average currents to remove friction.
-4. Solve Eq. (16) per joint or globally.
+Derive a gravity-only PSDM model:
 
 ```matlab
-% Per-sample wrench from calibration mass (preprint Eq. (17)):
-% f_w = [m_w * g_world; R(q) * r_w x (m_w * g_world)]
-% delta_tau = diag(Kt_joint) * (i_with - i_nom);
-% J = geometricJacobian(...);  % from Robotics Toolbox or custom FK
-% delta_tau = J' * f_w;
-% Kt_joint_j = (J' * f_w) / (i_with - i_nom);  % scalar per sample, median over samples
+[E_grav, P_grav] = PSDM.deriveModel(DH, g, [], ...
+    'gravity_only', true);
 ```
 
-Validate on held-out poses. Target R² near 1.0 on training data (see **Appendix F**).
-
-**Output:** `identified_joint_parameters.mat` with field `Kt_joint`.
-
----
-
-#### Step 4A.2: Gravity calibration (preprint Section 3.2)
-
-This is the step that often confuses beginners. Below are **two equivalent approaches**.
-
-##### What "gravity columns" means in PSDM
-
-Each column of `E` is one basis function. Gravity-only functions depend on `q` (through `sin(q)` and `cos(q)` terms) but **not** on `qdot` or `qddot`.
-
-In code (see `generateYp.m`), gravity columns are those with **zero exponents** in the velocity and acceleration rows of `E`:
+Build and fit its regressor from slow data:
 
 ```matlab
-DOF = size(DH, 1);
-vel_acc_rows = (3*DOF + 1) : (5*DOF);
-grav_col_mask = ~any(E(vel_acc_rows, :) > 0, 1);
-E_grav = E(:, grav_col_mask);
-P_grav = P(grav_col_mask, :, :);   % subset rows of P to match E_grav
+Y_grav = build_psdm_regressor(E_grav, P_grav, q, ...
+    zeros(size(q)), zeros(size(q)));
+
+tau_target = tau_meas - tau_ee;
+theta_grav = Y_grav \ reshape(tau_target, [], 1);
+tau_grav_hat = reshape(Y_grav * theta_grav, size(tau_meas));
 ```
 
-##### Method 1 (recommended for students): derive a gravity-only model
+The gravity-only parameter vector is not guaranteed to use the same base-parameter coordinates as the complete model. Use it to predict gravity and isolate friction, not to fill entries of `Theta_full` by hand.
+
+#### Step 4A.3: Friction calibration
 
 ```matlab
-[E_grav, P_grav] = PSDM.deriveModel(DH, g, [], 'gravity_only', true);
-l_grav = size(P_grav, 2);
-fprintf('Gravity-only model has l_grav = %d parameters.\n', l_grav);
-```
-
-This calls `deriveGravityModel` inside the toolbox and is the cleanest path.
-
-##### Method 2: extract from the full model
-
-Use the `grav_col_mask` code above on your saved full `E` and `P`. Method 1 and Method 2 should produce the same observable gravity subspace if kinematics match.
-
-##### Build `Y_grav` and identify `theta_b_grav`
-
-Use **slow** motion data where velocity and acceleration torques are negligible. You may set `Qd = 0` and `Qdd = 0` when building the regressor, or use actual small derivatives from slow logs.
-
-```matlab
-load('processed_data/gravity_train.mat', 'q', 'qdot', 'qddot', 'tau_meas', 'i');
-load('identified_joint_parameters.mat', 'Kt_joint');
-
-% Measured torque at joint
-tau_meas = diag(Kt_joint) * i;
-
-% Gravity regressor (Method 1 example)
-[Y_stack_grav, Yb_grav] = build_psdm_regressor(E_grav, P_grav, q, zeros(size(q)), zeros(size(q)));
-
-% Subtract known end-effector wrench mapped to joints (if applicable):
-% tau_net = tau_meas - tau_ee;
-tau_net = tau_meas;
-tau_vec = reshape(tau_net, [], 1);
-
-theta_b_grav = Y_stack_grav \ tau_vec;
-
-% Predicted gravity torque
-tau_grav_hat = reshape(Y_stack_grav * theta_b_grav, size(tau_meas));
-```
-
-##### Map `theta_b_grav` into the full `theta_b` vector
-
-The gravity-only model uses a **subset** of base parameters. The full model has `l` parameters. After identifying gravity parameters:
-
-1. Derive the **full** model `[E, P] = PSDM.deriveModel(DH, g)`.
-2. Identify which full-model columns of `P` correspond to gravity parameters (compare `rank` and physical consistency, or fit full model with non-gravity `theta` fixed to zero).
-3. **Practical student shortcut:** keep `theta_b_grav` from the gravity-only derivation. For inertial calibration (Step 4A.4), subtract `tau_grav_hat` from measurements before fitting inertial terms, rather than merging parameter vectors manually.
-
-The Denso paper uses the subtraction approach (Eq. (19) and (21)), which avoids index bookkeeping errors.
-
-##### Validate
-
-```matlab
-rmse = sqrt(mean((tau_net(:) - tau_grav_hat(:)).^2));
-r2 = 1 - sum((tau_net(:) - tau_grav_hat(:)).^2) / sum((tau_net(:) - mean(tau_net(:))).^2);
-fprintf('Gravity fit: RMSE=%.3f Nm, R2=%.4f\n', rmse, r2);
-```
-
-Plot `tau_net` vs `tau_grav_hat` per joint on validation trajectories.
-
----
-
-#### Step 4A.3: Friction calibration (preprint Section 3.3)
-
-##### Idea
-
-Move one joint at a time with sinusoidal motion. Subtract gravity and known tool torque. What remains is mostly friction.
-
-##### Practical procedure
-
-```matlab
-% Isolate friction torque (preprint Eq. (19)):
 tau_fric_meas = tau_meas - tau_grav_hat - tau_ee;
-
-% Per joint i, fit LuGre parameters (Appendix H) or simpler Coulomb+viscous:
-% High |qdot|: tau_fric ≈ Fc*sign(qdot) + Fv*|qdot|^dv*sign(qdot)
 ```
 
-High-speed fit (linear in parameters once `dv` is fixed):
+Fit LuGre friction as in the preprint, or justify a simpler model by held-out residual behavior. Store friction outside PSDM.
+
+#### Step 4A.4: Inertial assessment and full-model fit
+
+First inspect the inertia-dominant residual:
 
 ```matlab
-% Example: joint 1, high-speed samples
-idx = abs(qdot(1,:)) > 0.5;   % rad/s threshold, tune per robot
-y = tau_fric_meas(1, idx)';
-X = [sign(qdot(1,idx))', (abs(qdot(1,idx)).^0.5 .* sign(qdot(1,idx)))'];  % example
-params = X \ y;
-```
-
-Low-speed / pre-sliding: simulate LuGre state `z` (Eq. (12)) and use `fminsearch` to minimize sum of squared errors (as in the preprint).
-
-**Output:** friction coefficients in `identified_joint_parameters.mat`.
-
----
-
-#### Step 4A.4: Inertial calibration (preprint Section 3.4)
-
-##### Idea
-
-After removing gravity, friction, and tool torque, the residual should be explained by inertial regressor columns (those involving `qddot` and velocity products).
-
-##### Extract inertial columns from full model
-
-```matlab
-DOF = size(DH, 1);
-vel_acc_rows = (3*DOF + 1) : (5*DOF);
-iner_col_mask = any(E(vel_acc_rows, :) > 0, 1);
-E_iner = E(:, iner_col_mask);
-P_iner = P(iner_col_mask, :, :);
-```
-
-Alternatively, use velocity/acceleration-only derivation flags inside the toolbox (`deriveAccelModel`, `deriveVelocityModel`) for advanced users. Column masking on the full model is sufficient for coursework.
-
-##### Practical procedure
-
-```matlab
-load('processed_data/inertial_train.mat', 'q', 'qdot', 'qddot', 'tau_meas', 'i');
-
-tau_meas = diag(Kt_joint) * i;
 tau_iner_meas = tau_meas - tau_grav_hat - tau_fric_hat - tau_ee;
-
-[Y_stack_iner, ~] = build_psdm_regressor(E_iner, P_iner, q, qdot, qddot);
-tau_vec = reshape(tau_iner_meas, [], 1);
-
-% Check conditioning before solving
-c = cond(Y_stack_iner);
-fprintf('cond(Y_iner) = %.2e\n', c);
-if c > 1e8
-    warning('Ill-conditioned regressor. Use regularization (Appendix C).');
-    lambda = 1e-4;   % tune via L-curve
-    theta_b_iner = (Y_stack_iner' * Y_stack_iner + lambda*eye(size(Y_stack_iner,2))) \ (Y_stack_iner' * tau_vec);
-else
-    theta_b_iner = Y_stack_iner \ tau_vec;
-end
 ```
 
-##### Assemble complete `theta_b`
-
-For simulation using `PSDM.inverseDynamics`, you need one `Theta` vector of length `l` matching the **full** `P` from `deriveModel`:
+Use it to evaluate excitation and conditioning. Then fit one full PSDM parameter vector compatible with the original `E, P`:
 
 ```matlab
-[E, P] = PSDM.deriveModel(DH, g);
-l = size(P, 2);
-
-% Build full Theta: use X2Theta structure or full regression on combined data
-[Y_full, ~] = build_psdm_regressor(E, P, q, qdot, qddot);
-tau_residual = tau_meas - tau_fric_hat - tau_ee;  % if gravity terms inside Theta
-Theta = Y_full \ reshape(tau_residual, [], 1);
-
-save('theta_b.mat', 'Theta', 'theta_b_grav', 'theta_b_iner');
+Y_full = build_psdm_regressor(E, P, q, qdot, qddot);
+tau_psdm_target = tau_meas - tau_fric_hat - tau_ee;
+Theta_full = Y_full \ reshape(tau_psdm_target, [], 1);
 ```
 
-**Student tip:** The cleanest validation is torque prediction, not parameter vector equality. Always compare `tau_hat` vs `tau_meas` on held-out data.
-
----
+The full fit includes both gravity and inertial PSDM terms. This avoids incorrectly combining two parameter vectors that were derived in different reduced parameter spaces.
 
 ### Mode B: Direct identification
 
-Use when friction is negligible and `Kt_joint` is trusted.
-
-#### Step 4B.1: Build regression matrix
+Use only when the target effort excludes separately modeled friction and known external wrench, or when their omission has been accepted.
 
 ```matlab
-[Y_stack, ~] = build_psdm_regressor(E, P, q, qdot, qddot);
-tau_vec = reshape(tau_meas, [], 1);
-Theta = Y_stack \ tau_vec;
+Y_full = build_psdm_regressor(E, P, q, qdot, qddot);
+Theta_full = Y_full \ reshape(tau_psdm_target, [], 1);
 ```
 
-#### Step 4B.2: Solve and diagnose
+Inspect `cond(Y_full)` and validate on held-out trajectories. A very large condition number means the fitted parameter values may be unstable even when training residuals are small.
+
+### Step 4.3: Optional reflected drive inertia
+
+The PSDM implementation allows an optional eleventh `X` column for drive inertia or drive mass. For a geared or ball-screw axis, the correct reflected quantity depends on the canonical output coordinate. Keep it out of the first model unless its reference and scaling are known.
+
+**Gate 3:** accept the fitted model only after held-out generalized-effort validation.
+
+## Phase 5: Validation and digital-twin packaging
+
+**Goal:** show that the model predicts held-out generalized effort in the correct joint coordinates and units.
+
+### Step 5.1: Predict held-out effort
 
 ```matlab
-fprintf('cond(Y) = %.2e\n', cond(Y_stack));
-tau_hat_vec = Y_stack * Theta;
-residual = tau_vec - tau_hat_vec;
-rmse = sqrt(mean(residual.^2));
+tau_psdm_hat = PSDM.inverseDynamics(E, P, Theta_full, q, qdot, qddot);
+tau_hat = tau_psdm_hat + tau_fric_hat + tau_ee;
 ```
 
-Compare `Theta` to `PSDM.X2Theta(E, P, DH, g, X_urdf)` if URDF inertias exist.
+For each joint, report:
 
----
+- RMSE,
+- R²,
+- peak error,
+- residual spectrum or time-history plot,
+- output unit, Nm or N.
 
-### Step 4.3: Optional motor inertia in PSDM model
+A prismatic joint can have excellent validation even though its values are not comparable numerically to a revolute joint's Nm residual.
 
-If motor reflected inertia `Im_i` should appear in `theta_b` (Lloyd 2021 Section 3.5):
+### Step 5.2: Optional forward-dynamics check
 
 ```matlab
-X = ones(n, 11);   % 11th column = Im_i
-[E, P] = PSDM.deriveModel(DH, g, X);
+Qdd_sim = PSDM.forwardDynamics(E, P, Theta_full, q, qdot, tau_psdm_target);
 ```
 
-Friction **cannot** be embedded in standard PSDM; model it separately (Mode A).
-
-**Gate 3:** Held-out torque error meets your targets.
-
----
-
-## Phase 5: Validation and digital twin packaging
-
-**Goal:** Prove the model works on new data and package it for reuse.
-
-**Cross-reference:** `workflow_detailed.md`, Phase 5.
-
-### Step 5.1: Torque prediction validation
-
-```matlab
-load('psdm_model.mat', 'E', 'P');
-load('theta_b.mat', 'Theta');
-load('processed_data/val.mat', 'q', 'qdot', 'qddot', 'tau_meas', 'i');
-load('identified_joint_parameters.mat', 'Kt_joint');
-
-tau_hat = PSDM.inverseDynamics(E, P, Theta, q, qdot, qddot);
-
-% If friction modeled separately:
-% load friction model and compute tau_fric_hat
-% tau_hat_total = tau_hat + tau_fric_hat;
-
-for j = 1:size(q, 1)
-    e = tau_meas(j,:) - tau_hat(j,:);
-    rmse_j = sqrt(mean(e.^2));
-    ss_res = sum(e.^2);
-    ss_tot = sum((tau_meas(j,:) - mean(tau_meas(j,:))).^2);
-    r2_j = 1 - ss_res/ss_tot;
-    fprintf('Joint %d: RMSE=%.3f Nm, R2=%.4f\n', j, rmse_j, r2_j);
-end
-```
-
-Report slow-speed and high-speed segments separately.
-
-### Step 5.2: Forward dynamics check (optional)
-
-```matlab
-Qdd_sim = PSDM.forwardDynamics(E, P, Theta, q, qdot, tau_meas);
-% Compare Qdd_sim to qddot (expect qualitative agreement, not perfect match)
-```
+Compare `Qdd_sim` with processed canonical `qddot`. This checks internal consistency. It does not replace effort validation.
 
 ### Step 5.3: Export model package
 
-Copy these into `model_v1.0.0/`:
-
-- `psdm_model.mat`
-- `theta_b.mat`
-- `identified_joint_parameters.mat`
-- `conventions_sheet.md`
-- `kt_conversion_notes.md`
-- `derivative_filter_config.yaml`
-- `validation_report.md`
-
-### Step 5.4: Fast code generation (optional)
-
-```matlab
-PSDM.makeInverseDynamics('robot_id', E, P, Theta);
-% Generates optimized C/MATLAB code for real-time use
+```text
+model_v1.0.0/
+  psdm_model.mat
+  theta_b.mat
+  conventions_sheet.md
+  actuator_to_joint_map.yaml
+  actuator_effort_conversion_notes.md
+  friction_model.*
+  fk_validation_report.md
+  derivative_filter_config.yaml
+  validation_report.md
 ```
 
-### Step 5.5: Simulink or external integration
-
-Wrap a single function:
+### Step 5.4: Optional fast code generation
 
 ```matlab
-function tau = robot_inverse_dynamics(q, qdot, qddot)
-% q, qdot, qddot: n x 1, units rad and rad/s
-    persistent E P Theta
-    if isempty(E)
-        s = load('psdm_model.mat');
-        t = load('theta_b.mat');
-        E = s.E; P = s.P; Theta = t.Theta;
-    end
-    tau = PSDM.inverseDynamics(E, P, Theta, q, qdot, qddot);
-end
+PSDM.makeInverseDynamics('robot_id', E, P, Theta_full);
+PSDM.makeForwardDynamics('robot_fd', E, P, Theta_full);
 ```
 
-Document joint order and units in the file header.
+Generated PSDM code covers the rigid-body term. Add the separately identified friction and external-wrench models in the deployment wrapper when required.
 
-**Gate 4:** Interface and runtime requirements met.
+### Step 5.5: Deployment interface
 
----
+```text
+tau_hat = robot_inverse_dynamics(q, qdot, qddot, model_state)
+```
+
+Document joint order, units, `q=0` definition, included friction/tool effects, valid state limits, and output units.
+
+**Gate 4:** a clean environment reproduces the validation result from the versioned package.
 
 ## Phase 6: Iteration loop
 
-**Cross-reference:** `workflow_detailed.md`, Phase 6.
+Repeat affected steps when a payload, tool, encoder reference, gearbox convention, ball-screw lead, current scaling, friction behavior, filter policy, or kinematic model changes.
 
-When the tool changes:
-
-1. Update URDF and `tau_ee`.
-2. Re-run gravity calibration (Step 4A.2) and inertial calibration (Step 4A.4).
-3. Keep the same `DH` if kinematics unchanged.
-4. Bump version to `model_v1.1.0` and re-run all validation trajectories.
-
----
+A kinematic-coordinate change invalidates the raw-to-joint mapping and requires a new FK validation. A current-to-effort change requires a new Checkpoint A. Do not treat these as minor regression retunes.
 
 ## Approval gates summary
 
 | Gate | Student check |
-|------|---------------|
-| **Gate 1** | `fk_validation_report.md` shows PASS |
-| **Gate 2** | `timing_quality_report.md` + `derivative_filter_config.yaml` exist |
-| **Gate 3** | `validation_report.md` meets RMSE/R² targets on held-out data |
-| **Gate 4** | `robot_inverse_dynamics()` runs in target environment within time budget |
-
----
+|---|---|
+| **Gate 0** | Physical signs, canonical `q`, reference counts, and local joint directions are documented. |
+| **Gate 1** | URDF and DH FK agree for the same canonical `q` test poses. |
+| **Gate 2A** | PSDM derives and evaluates with the approved DH table. |
+| **Gate 2B** | Coordinate conversion, effort conversion, timing, and derivative configuration are documented. |
+| **Gate 3** | Held-out generalized-effort prediction meets per-joint target metrics. |
+| **Gate 4** | Versioned model package and deployment interface reproduce validation results. |
 
 ## Reproducibility checklist
 
-**Cross-reference:** `workflow_detailed.md`, Reproducibility checklist.
+- [ ] Raw encoder counts and currents are preserved unchanged.
+- [ ] `actuator_to_joint_map.yaml` produces the `q` used in URDF FK, DH FK, PSDM, and regression.
+- [ ] `+q` is written in a joint-local frame, not as an end-effector motion direction.
+- [ ] `s_i` does not duplicate the encoder-sign correction.
+- [ ] `Keff` units are Nm/A for revolute joints and N/A for prismatic joints.
+- [ ] All derivative and resampling settings are versioned.
+- [ ] Held-out trajectories are not used to tune parameters.
+- [ ] The model package identifies which effects PSDM includes and which it adds separately.
 
-Work through every box before calling the project done.
+## Planned companion artifacts
 
----
+- `urdf_to_dh.py`, candidate DH and conventions generator.
+- FK validation helper using the same canonical `q` as PSDM.
+- Raw telemetry conversion helper driven by `actuator_to_joint_map.yaml`.
+- MATLAB regressor, calibration, and validation helpers.
+- Templates for the three convention and conversion artifacts.
 
-## Planned companion artifacts (later tasks)
-
-- `urdf_to_dh.py` and FK validation script.
-- `matlab/build_psdm_regressor.m` (provided inline in this guide).
-- Example `derivative_filter_config.yaml` template.
-
----
+The URDF helper must generate a draft and validation report. It must not invent missing mechanics or firmware information.
 
 ## References
 
-1. Lloyd, S., Irani, R., Ahmadi, M. (2021). *Mechanism and Machine Theory*, 156, 104149. [doi:10.1016/j.mechmachtheory.2020.104149](https://doi.org/10.1016/j.mechmachtheory.2020.104149)
-2. PSDM-README.pdf
-3. Lloyd et al., Denso VS-6556G application preprint (MECC supplementary material).
-4. Spong, M. W., Vidyasagar, M. (2008). *Robot Dynamics and Control*.
-5. [https://github.com/CarletonABL/PSDM](https://github.com/CarletonABL/PSDM)
-
----
+1. Lloyd, S., Irani, R., Ahmadi, M. (2021). *A numeric derivation for fast regressive modeling of manipulator dynamics*. Mechanism and Machine Theory, 156, 104149.
+2. `PSDM-README.pdf`.
+3. Lloyd et al., Denso VS-6556G PSDM application preprint.
+4. `critical_ambiguities.md`.
+5. CarletonABL/PSDM MATLAB implementation, recorded commit hash required for a reproducible run.
 
 # Appendices
 
-## Appendix A: Denavit-Hartenberg parameters (primer)
+## Appendix A: Denavit-Hartenberg parameters and joint directions
 
 ### Purpose
 
-DH parameters encode link geometry so forward kinematics can chain transforms from base to tool.
+DH parameters encode the rigid geometry from base to tool. The PSDM table uses one row per actuated joint and expects standard-DH parameters.
 
-### Standard DH transform (conceptual)
+### Standard DH transform
 
-From frame `i-1` to frame `i`:
-
-```
+```text
 T_i = Rot_z(theta_i) * Trans_z(d_i) * Trans_x(a_i) * Rot_x(alpha_i)
 ```
 
 ### PSDM extensions
 
-| Parameter | Role |
-|-----------|------|
-| `t_i = 0` | Revolute: `q` enters in `theta_i` |
-| `t_i = 1` | Prismatic: `q` enters in `d_i` |
-| `s_i = +/-1` | Flips sign if encoder positive direction disagrees with DH |
+| Parameter | Meaning |
+|---|---|
+| `t_i = 0` | Revolute joint. `q_i` enters `theta_i`. |
+| `t_i = 1` | Prismatic joint. `q_i` enters `d_i`. |
+| `s_i = +1` or `-1` | Sign between canonical physical `q_i` and the increasing DH variable. |
 
-### Assignment recipe (revolute joint)
+### Why DH sign is not encoder scaling
 
-1. Place `z_{i-1}` along the joint rotation axis.
-2. Place `x_i` along the common normal to `z_{i-1}` and `z_i` (or perpendicular to both if axes intersect).
-3. Read off `a_i`, `alpha_i`, `d_i`, `theta_i` from geometry.
-4. Compare FK output to URDF/CAD at 3 known poses.
+Suppose a motor encoder requires 100 motor revolutions for one output-joint revolution. The conversion from counts to output angle belongs in `actuator_to_joint_map.yaml`. `s_i` cannot represent this 100:1 scale because it only has the values `+1` and `-1`.
 
----
+### Assignment recipe
+
+1. Define canonical physical `+q` locally for the joint.
+2. Create the standard-DH frame assignment.
+3. Determine whether a positive canonical `q` increases or decreases the DH variable.
+4. Set `s_i` accordingly.
+5. Verify by FK comparison against URDF.
+
+For a prismatic joint, `+q` is positive local translation. For example, `child link translates along +Z_P3`. The direction may rotate in the base frame as earlier joints move, but its local definition remains unchanged.
 
 ## Appendix B: Least squares regression (primer)
 
@@ -1028,7 +794,7 @@ y = Y * theta
 
 - `Y`: `N x l` regressor matrix (stacked samples).
 - `theta`: `l x 1` parameters to find.
-- `y`: `N x 1` measured torques (stacked).
+- `y`: `N x 1` measured generalized effort values (stacked).
 
 ### MATLAB solution
 
@@ -1075,15 +841,13 @@ Plot `||theta||` vs `||Y*theta - y||` for several `lambda` (L-curve) to pick a c
 
 ---
 
-## Appendix D: Numerical differentiation and filtering
+## Appendix D: Numerical differentiation and filtering in canonical units
 
-### Why filtering comes first
+### Why conversion comes before filtering
 
-Differentiation amplifies noise. Always low-pass filter position (or velocity) before estimating higher derivatives.
+Differentiation amplifies noise. Convert counts into link-side rad or m first, then tune filters and check limits in meaningful physical units.
 
 ### Zero-phase filtering (`filtfilt`)
-
-`filtfilt` applies a filter forward and backward so phase delay cancels. Used in the Denso calibration paper.
 
 ```matlab
 [b, a] = butter(order, fc/(fs/2));
@@ -1092,149 +856,127 @@ q_smooth = filtfilt(b, a, q, [], 2);
 
 ### Central difference
 
-On uniform grid with spacing `dt`:
+On a uniform grid with spacing `dt`:
 
+```text
+qdot(t)  ~= (q(t+dt) - q(t-dt)) / (2*dt)
+qddot(t) ~= (qdot(t+dt) - qdot(t-dt)) / (2*dt)
 ```
-qdot(t)  ≈ (q(t+dt) - q(t-dt)) / (2*dt)
-qddot(t) ≈ (qdot(t+dt) - qdot(t-dt)) / (2*dt)
-```
 
-Endpoints need one-sided formulas or trim them from the dataset.
+Endpoints require a one-sided method or removal from the fitting set.
 
-### Resampling to uniform rate
-
-If `std(dt)` is large:
+### Resampling to a uniform rate
 
 ```matlab
-t_uniform = t(1) : mean(dt) : t(end);
+t_uniform = t(1) : mean(diff(t)) : t(end);
 q_uniform = interp1(t, q', t_uniform, 'pchip')';
 ```
 
-Use `pchip` or `spline` to avoid overshoot on sharp moves.
+Validate resampling and filter choices by checking physical limits, excitation bandwidth, regressor conditioning, and held-out residuals.
 
----
-
-## Appendix E: PSDM regressor structure (primer)
+## Appendix E: PSDM regressor structure
 
 ### Generator vector
 
-PSDM bundles joint variables into:
+PSDM builds basis functions from canonical joint coordinates:
 
+```text
+gamma = [q; sin(q); cos(q); qdot; qddot]
 ```
-gamma = [q; sin(q); cos(q); qdot; qddot]    % size 5n x 1
-```
+
+For a revolute coordinate, trigonometric terms are physically meaningful because `q` is an angle. For a prismatic coordinate, PSDM treats the coordinate through the prismatic multiplier functions described in the PSDM paper. In both cases the input must be the link-side generalized coordinate, not motor counts.
 
 ### Exponent matrix `E`
 
-Each column `E(:, j)` stores exponents for gamma factors. Example for one term resembling `sin(q2)*qddot1`:
-
-- Exponent on `sin(q2)` is 1.
-- Exponent on `qddot1` is 1.
-- All other exponents are 0.
-
-Evaluation (PSDM-README Eq. (2)):
-
-```
-yp_j = prod( gamma_k ^ E(k,j) )
-```
-
-`PSDM.generateYp(Q, Qd, Qdd, E)` performs this for `N` samples.
+Each column of `E` stores exponents for the generator factors in one PSDM basis function. `PSDM.generateYp(Q, Qd, Qdd, E)` evaluates them for a set of samples.
 
 ### Reduction matrix `P`
 
-Not all lumped parameters are independent. `P_i` maps base parameters to joint-`i` lumped coefficients:
+`P` has size `p x ell x DOF`. Page `P(:,:,i)` maps the base parameter vector to the coefficient vector for joint `i`:
 
-```
+```text
 tau_i = yp * P_i * theta_b
 ```
 
-`P` has size `p x l x n` (page matrix: one `P_i` per joint).
+### Gravity and dynamic columns
 
-### Gravity vs inertial columns (key insight)
-
-| Term type | Nonzero exponents in rows of `E` |
-|-----------|----------------------------------|
-| Gravity | `q`, `sin(q)`, `cos(q)` only (rows `1:3n`) |
-| Velocity | `qdot` rows (`3n+1:4n`) |
-| Acceleration | `qddot` rows (`4n+1:5n`) |
-
-Gravity torque magnitude includes `9.806132 * g_direction` applied inside `generateYp`.
+| Term type | Relevant state dependence |
+|---|---|
+| Gravity | `q` only. |
+| Velocity terms | `q` and `qdot`. |
+| Acceleration terms | `q`, `qdot`, and `qddot`. |
 
 ### Evaluate torque in one line
 
 ```matlab
 tau = PSDM.inverseDynamics(E, P, Theta, Q, Qd, Qdd);
-% Internally: Yp = generateYp(...); Yb = blockprod(Yp,P); tau = Yb * Theta
 ```
 
----
+`Q`, `Qd`, and `Qdd` must all be `DOF x N` matrices in canonical joint units.
 
 ## Appendix F: RMSE and R² metrics
 
-### RMSE (root mean square error)
+### RMSE, root mean square error
 
-```
+```text
 RMSE = sqrt( mean( (tau_meas - tau_hat).^2 ) )
 ```
 
-Units: Nm. Lower is better.
+Report RMSE separately for each joint. Its unit is Nm for a revolute joint and N for a prismatic joint. Do not aggregate mixed-unit joint errors into one unqualified RMSE.
 
-### R² (coefficient of determination)
+### R², coefficient of determination
 
-```
+```text
 R2 = 1 - SS_res / SS_tot
 SS_res = sum( (tau_meas - tau_hat).^2 )
 SS_tot = sum( (tau_meas - mean(tau_meas)).^2 )
 ```
 
-`R2 = 1` is perfect; `R2 = 0` means the model is no better than predicting the mean.
+`R2 = 1` is a perfect fit. `R2 = 0` means the model is no better than predicting that joint's mean effort.
 
-MATLAB:
+MATLAB for one joint:
 
 ```matlab
-SS_res = sum((tau_meas(:) - tau_hat(:)).^2);
-SS_tot = sum((tau_meas(:) - mean(tau_meas(:))).^2);
-R2 = 1 - SS_res/SS_tot;
+SS_res = sum((tau_meas_i - tau_hat_i).^2);
+SS_tot = sum((tau_meas_i - mean(tau_meas_i)).^2);
+R2_i = 1 - SS_res/SS_tot;
 ```
 
----
-
-## Appendix G: Motor torque and gear ratio conversion
+## Appendix G: From motor current to generalized effort
 
 ### Symbols
 
-| Symbol | Typical unit | Meaning |
-|--------|--------------|---------|
-| `Kt_motor` | Nm/A | Torque constant at motor shaft |
-| `N` | - | Gear ratio (motor revs per joint rev) |
-| `eta` | - | Efficiency (0 to 1) |
-| `Kt_joint` | Nm/A | Effective constant at joint |
+| Symbol | Unit | Meaning |
+|---|---|---|
+| `c` | counts | Raw motor encoder position. |
+| `C` | counts/motor rev | Encoder scale. |
+| `R` | motor rev/output rev | Transmission reduction definition used in this guide. |
+| `L` | m/output rev | Ball-screw lead. |
+| `Kt_motor` | Nm/A | Motor-shaft torque constant. |
+| `Keff` | Nm/A or N/A | Current-to-generalized-effort scale. |
 
-### Power balance (ideal gearbox)
+### Position conversion
 
-```
-tau_joint * qdot_joint = tau_motor * qdot_motor
-qdot_motor = N * qdot_joint
-=> tau_joint = tau_motor / N = (Kt_motor * i) / N
-```
-
-So:
-
-```
-Kt_joint = Kt_motor / N        (verify direction with firmware team)
+```text
+revolute:  q = q_offset + sigma_enc * 2*pi*(c-c_ref)/(C*R)
+prismatic: q = q_offset + sigma_enc * L*(c-c_ref)/(C*R)
 ```
 
-### Sign
+### Generalized effort conversion
 
-If positive motor current produces negative joint torque under your convention:
-
-```
-Kt_joint = -abs(Kt_motor / N)
+```text
+tau_meas = Keff * i
 ```
 
-Always confirm with a slow static test: hold pose, command small `+q` motion, check whether `i` sign matches expected gravity torque sign.
+For a revolute axis, `tau_meas` is a torque. For a prismatic axis, it is a force.
 
----
+### Ball-screw interpretation
+
+**[Inference]** In an ideal screw, mechanical power relates screw torque and axial force. The force scale therefore depends on motor torque constant, all transmission stages, screw lead, sign, and loss assumptions. Use a known-load calibration to resolve the final scale and sign. Do not transfer a revolute torque-scale formula to a prismatic axis without the screw conversion.
+
+### Sign check
+
+Run a slow known-load test. The converted effort must have the expected polarity and a plausible magnitude. If it does not, inspect the ratio definition, current convention, mechanical inversion, screw lead direction, and reference-pose coordinate definition before fitting PSDM parameters.
 
 ## Appendix H: LuGre friction model (summary)
 
@@ -1246,11 +988,13 @@ From the application preprint (Eq. (12) to (14)).
 zdot_i = qdot_i - (qdot_i / g_i(qdot_i)) * z_i
 ```
 
-### Friction torque
+### Friction generalized effort
 
 ```
 tau_fric_i = sigma0_i * z_i + sigma1_i * zdot_i + Fv_i * |qdot_i|^dv_i * sign(qdot_i)
 ```
+
+The Denso preprint expresses this quantity as torque because its joints are revolute. For a prismatic axis, use the equivalent friction force in N. **[Inference]** The parameterization and its suitability for a prismatic transmission must be validated experimentally.
 
 ### Stribeck function
 
@@ -1270,10 +1014,14 @@ LuGre is **nonlinear** in parameters. Use `lsqnonlin` or `fminsearch` rather tha
 ## Appendix I: Glossary
 
 | Term | Definition |
-|------|------------|
-| Base parameters `theta_b` | Minimal set of inertial combinations identifiable from motion |
-| DH table | `n x 6` kinematic parameters for PSDM |
-| Digital twin | Simulation model calibrated to match real robot |
-| Regressor `Y` | Matrix multiplying parameter vector to predict torque |
-| URDF | XML robot description format |
-| Held-out data | Validation set never used during parameter fitting |
+|---|---|
+| Canonical joint coordinate `q` | Link-side generalized coordinate supplied to URDF FK, DH FK, PSDM, and regression. |
+| Drive count `c` | Raw motor encoder count. It is not automatically a joint coordinate. |
+| `encoder_to_q_sign` | Sign mapping raw count increase to physical canonical `+q`. |
+| DH sign `s_i` | Sign mapping canonical `+q` to increasing `theta_i` or `d_i` in the DH row. |
+| Generalized effort `tau` | Torque for revolute joint, force for prismatic joint. |
+| `Keff` | Current-to-generalized-effort scale, Nm/A or N/A depending on joint type. |
+| Base parameters `theta_b` | Minimal PSDM inertial combinations identified from motion. |
+| DH table | PSDM standard-DH kinematic input with columns `[a, alpha, d, theta, t, s]`. |
+| Held-out data | Validation trajectory not used to fit or tune the model. |
+| URDF | XML robot description used here as a source for a candidate kinematic chain and FK reference. |
