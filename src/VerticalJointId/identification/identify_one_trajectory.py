@@ -6,6 +6,7 @@ from trajectories import multisine_trajectory
 from scipy.optimize import least_squares
 import simulation.params_system as SystemParams 
 import simulation.params_model as ModelParams
+import analyze_uncertainities as AnalyzeUncertainities
 
 
 # ============================================================
@@ -464,6 +465,24 @@ def main() -> None:
         identified_position=identified_data["linear_position"],
     )
 
+    # --------------------------------------------------------
+    # 5. Analyze the residual pattern
+    # --------------------------------------------------------
+    e_linear_position = gt_data["linear_position"] - identified_data["linear_position"]
+    
+    # Smoot measured position and derive speed and acceleration (on smoothed data)
+    x_smooth, v, a = AnalyzeUncertainities.compute_smoothed_kinematics(t, gt_data["linear_position"])
+
+    # Build operating masks to get region of: reversal speed, hig/low speed and accel, positive/negative motion
+    masks = AnalyzeUncertainities.build_operating_masks(v, a)
+
+    for name, mask in masks.items():
+        AnalyzeUncertainities.print_metrics(name, e_linear_position[mask])
+
+    # --------------------------------------------------------
+    # 6. Plot the residual pattern
+    # --------------------------------------------------------
+    AnalyzeUncertainities.diagnostic_scatter_plots(t, e_linear_position, x_smooth, v, a, identified_data["motor_current"])
 
 def print_theta(theta: np.ndarray) -> None:
     names = [

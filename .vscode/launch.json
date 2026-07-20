@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "identify_one_trajectory",
-      "type": "python", # python to run withou the debugger, debugpy to run with the debugger
+      "type": "python", // python to run without the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/identification/identify_one_trajectory.py",
       "cwd": "${workspaceFolder}/src/VerticalJointId",
@@ -15,7 +15,7 @@
     },
     {
       "name": "Test Ground Truth",
-      "type": "python", # python to run withou the debugger, debugpy to run with the debugger
+      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/tests/test_groundTruth.py",
       "cwd": "${workspaceFolder}/src/VerticalJointId",
@@ -26,8 +26,8 @@
       },
     },
     {
-      "name": "Test Simple "suppressMultipleSessionWarning": true,",
-      "type": "python", # python to run withou the debugger, debugpy to run with the debugger
+      "name": "Test Simple ",
+      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/tests/test_simulation.py",
       "cwd": "${workspaceFolder}/src/VerticalJointId",
@@ -39,7 +39,7 @@
     },
     {
       "name": "Test Multisine",
-      "type": "python", # python to run withou the debugger, debugpy to run with the debugger
+      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/tests/test_multisine.py",
       "cwd": "${workspaceFolder}/src/VerticalJointId",
@@ -47,6 +47,18 @@
       "justMyCode": false,
       "env": {
         "PYTHONPATH": "${workspaceFolder}/src/VerticalJointId"
+      }
+    },
+    {
+      "name": "Generate TestData",
+      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
+      "request": "launch",
+      "program": "${workspaceFolder}/src/experiments/01-step/generateStepData.py",
+      "cwd": "${workspaceFolder}/src/experiments/01-step",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src/experiments"
       }
     }
   ]
