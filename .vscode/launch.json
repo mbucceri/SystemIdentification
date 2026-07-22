@@ -2,23 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "identify_one_trajectory",
-      "type": "python", // python to run without the debugger, debugpy to run with the debugger
-      "request": "launch",
-      "program": "${workspaceFolder}/src/VerticalJointId/identification/identify_one_trajectory.py",
-      "cwd": "${workspaceFolder}/src",
-      "console": "integratedTerminal",
-      "justMyCode": false,
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/src"
-      }
-    },
-    {
       "name": "identify",
       "type": "python", // python to run without the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/identification/identify.py",
-      "args": ["--gtPath", "${workspaceFolder}/src/experiments/10-MultiSine/01-MultiSineTelemetry_groundTruth.csv"],
+      "args": ["--gtPath", "${workspaceFolder}/src/VerticalJointId/experiments/01-MultiSineTelemetry_groundTruth.csv"],
       "cwd": "${workspaceFolder}/src",
       "console": "integratedTerminal",
       "justMyCode": false,
@@ -27,11 +15,29 @@
       }
     },
     {
-      "name": "Test Ground Truth",
+      "name": "Run Model - Ground Truth",
       "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
-      "program": "${workspaceFolder}/src/VerticalJointId/tests/test_groundTruth.py",
+      "program": "${workspaceFolder}/src/VerticalJointId/simulation/runModel_groundTruth.py",
       "cwd": "${workspaceFolder}/src",
+      "args": ["-if", "${workspaceFolder}/src/InputData/10-MultiSine/01-MultiSineInput.csv",
+                "-of", "${workspaceFolder}/src/VerticalJointId/experiments/01-MultiSineTelemetry_groundTruth.csv",
+                "-p"],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+    },
+        {
+      "name": "Run Model - simplified",
+      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
+      "request": "launch",
+      "program": "${workspaceFolder}/src/VerticalJointId/simulation/runModel_simplified.py",
+      "cwd": "${workspaceFolder}/src",
+      "args": ["-if", "${workspaceFolder}/src/InputData/10-MultiSine/01-MultiSineInput.csv",
+                "-of", "${workspaceFolder}/src/VerticalJointId/experiments/01-MultiSineTelemetry_groundTruth.csv",
+                "-p"],
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
@@ -39,23 +45,17 @@
       },
     },
     {
-      "name": "Test Simple ",
+      "name": "Generate Step Input",
       "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
-      "program": "${workspaceFolder}/src/VerticalJointId/tests/test_simulation.py",
-      "cwd": "${workspaceFolder}/src/VerticalJointId",
-      "console": "integratedTerminal",
-      "justMyCode": false,
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/src/VerticalJointId"
-      }
-    },
-    {
-      "name": "Test Multisine",
-      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
-      "request": "launch",
-      "program": "${workspaceFolder}/src/VerticalJointId/tests/test_multisine.py",
-      "cwd": "${workspaceFolder}/src",
+      "program": "${workspaceFolder}/src/InputData/01-Step/generateStepData.py",
+      "cwd": "${workspaceFolder}/src/InputData/01-Step",
+      "args": [ "-ts", "0.001", 
+                "-et", "10.0", 
+                "-b", "0.8", 
+                "-st", "1.0", 
+                "-sh", "0.6", 
+                "-of", "01-StepInput.csv"],
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
@@ -63,22 +63,10 @@
       }
     },
     {
-      "name": "Generate TestData",
+      "name": "Generate MultiSine Input",
       "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
-      "program": "${workspaceFolder}/src/experiments/01-step/generateStepData.py",
-      "cwd": "${workspaceFolder}/src/experiments/01-step",
-      "console": "integratedTerminal",
-      "justMyCode": false,
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/src/experiments"
-      }
-    },
-    {
-      "name": "Generate MultiSine",
-      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
-      "request": "launch",
-      "program": "${workspaceFolder}/src/experiments/10-MultiSine/generateMultiSineData.py",
+      "program": "${workspaceFolder}/src/InputData/10-MultiSine/generateMultiSineData.py",
 
       "args": ["-ts", "0.001",
             "-et", "10.0",
@@ -86,8 +74,8 @@
             "-f", "0.2", "0.5", "0.9", "1.7", "2.8", "4.0",
             "-ph", "0.0", "1.1", "2.2", "0.7", "1.9", "2.8",
             "-a", "2.0",
-            "-of", "MultiSineData.csv"],
-      "cwd": "${workspaceFolder}/src/experiments/10-MultiSine",
+            "-of", "01-MultiSineInput.csv"],
+      "cwd": "${workspaceFolder}/src/InputData/10-MultiSine",
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
