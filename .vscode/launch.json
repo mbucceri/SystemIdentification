@@ -14,6 +14,19 @@
       }
     },
     {
+      "name": "identify",
+      "type": "python", // python to run without the debugger, debugpy to run with the debugger
+      "request": "launch",
+      "program": "${workspaceFolder}/src/VerticalJointId/identification/identify.py",
+      "args": ["--gtPath", "${workspaceFolder}/src/experiments/10-MultiSine/01-MultiSineTelemetry_groundTruth.csv"],
+      "cwd": "${workspaceFolder}/src",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
+    },
+    {
       "name": "Test Ground Truth",
       "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",

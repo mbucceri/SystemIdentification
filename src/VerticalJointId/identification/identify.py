@@ -1,26 +1,27 @@
 from __future__ import annotations
 
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from trajectories import multisine_trajectory
 from scipy.optimize import least_squares
-import simulation.params_system as SystemParams 
-import simulation.params_model as ModelParams
+
+import VerticalJointId.simulation.params_system as SystemParams 
+import VerticalJointId.simulation.params_model as ModelParams
 import analyze_uncertainities as AnalyzeUncertainities
-import utils
+import utils.loadsave
 
 
 # ============================================================
 # Adapt these imports to your actual project names
 # ============================================================
-from simulation.sim_ground_truth import (
+from VerticalJointId.simulation.sim_ground_truth import (
     VerticalJointParams,
     VerticalJointState,
     VerticalPrismaticJointSimulator,
     motor_to_linear_gain,
 )
 
-from simulation.sim_simplified import (
+from VerticalJointId.simulation.sim_simplified import (
     SimplifiedVerticalJointParams,
     SimplifiedVerticalJointState,
     SimplifiedVerticalPrismaticJointSimulator,
@@ -123,34 +124,9 @@ def holding_current_ground_truth(params: VerticalJointParams) -> float:
 
 def load_ground_truth_dataset(path:str ) -> dict:
 
-    print(f"Loading experiment data: {path}")
-
-    inputData = utils.loadsave.load_array(path)
-
-    initial_state = VerticalJointState(
-        motor_current=0.0,
-        motor_angle=0.0,
-        motor_speed=0.0,
-        controller_integral=0.0,
-    )
-
-    sim = VerticalPrismaticJointSimulator(
-        params=VerticalJointParams(),
-        initial_state=initial_state,
-        seed=10,
-    )
-
-    data = sim.simulate(inputData["signal"])
-
-    # enrich computed data with the input values
-    data["time"] = inputData["time"]
-    data["desired_current"] = inputData["signal"]
-
-    return {
-        #v"params": gt_params,
-        "data": data,
-    }
-
+    print(f"Loading ground truth (real experiment) data: {path}")
+    gtData = utils.loadsave.load_array(path)
+    return gtData
 
 # ============================================================
 # Simplified model setup
@@ -353,20 +329,28 @@ def residual_function(
 
 def main() -> None:
     # --------------------------------------------------------
+    # 0. Argument parsing
+    # --------------------------------------------------------
+    arg_parser = argparse.ArgumentParser(description="Vertical joint system identification")
+    arg_parser.add_argument("--gtPath", "-gt", type=str, required=True, help="Path to the ground truth dataset file")
+    arg_parser.add_argument("--thetaPath", "-th", type=str, required=False, help="Path to the identified theta values file")
+    args = arg_parser.parse_args()
+    if args.gtPath is None:
+        raise ValueError("Ground truth dataset path (--gtPath) is required.")
+    
+    # --------------------------------------------------------
     # 1. Load real experiment data data
     # --------------------------------------------------------
-    gt = load_ground_truth_dataset()
+    gt = load_ground_truth_dataset(args.gtPath)
 
     # gt_params = gt["params"]
-    gt_data = gt["data"]
-
-    t = gt_data["time"]
+    t = gt["time"]
 
     # Simplified model input: measured motor current, not desired current.
-    measured_motor_current = gt_data["motor_current"]
+    measured_motor_current = gt["motor_current"]
 
     # Synthetic measurement: linear encoder.
-    measured_linear_position = gt_data["linear_encoder"]
+    measured_linear_position = gt["linear_encoder"]
 
     # Initial condition from measurement
     initial_position = measured_linear_position[0]
@@ -442,8 +426,8 @@ def main() -> None:
     )
 
     plot_results(
-        t=t,
-        desired_current=gt_data["desired_current"],
+        t=gt["time"],
+        desired_current=gt["desired_current"],
         measured_motor_current=measured_motor_current,
         measured_position=measured_linear_position,
         identified_position=identified_data["linear_position"],
@@ -452,10 +436,10 @@ def main() -> None:
     # --------------------------------------------------------
     # 5. Analyze the residual pattern
     # --------------------------------------------------------
-    e_linear_position = gt_data["linear_position"] - identified_data["linear_position"]
+    e_linear_position = measured_linear_position - identified_data["linear_position"]
     
     # Smoot measured position and derive speed and acceleration (on smoothed data)
-    x_smooth, v, a = AnalyzeUncertainities.compute_smoothed_kinematics(t, gt_data["linear_position"])
+    x_smooth, v, a = AnalyzeUncertainities.compute_smoothed_kinematics(gt["time"], measured_linear_position)
 
     # Build operating masks to get region of: reversal speed, hig/low speed and accel, positive/negative motion
     masks = AnalyzeUncertainities.build_operating_masks(v, a)
@@ -466,7 +450,7 @@ def main() -> None:
     # --------------------------------------------------------
     # 6. Plot the residual pattern
     # --------------------------------------------------------
-    AnalyzeUncertainities.diagnostic_scatter_plots(t, e_linear_position, x_smooth, v, a, identified_data["motor_current"])
+    AnalyzeUncertainities.diagnostic_scatter_plots(gt["time"], e_linear_position, x_smooth, v, a, identified_data["motor_current"])
 
 def print_theta(theta: np.ndarray) -> None:
     names = [
@@ -512,7 +496,6 @@ def plot_results(
     plt.grid(True)
 
     plt.show()
-
 
 if __name__ == "__main__":
     main()

@@ -37,13 +37,22 @@ def compute_smoothed_kinematics(t, x, window_length=101, polyorder=3):
 
 
 def error_metrics(e):
-    return {
-        "bias": np.mean(e),
-        "mae": np.mean(np.abs(e)),
-        "rmse": np.sqrt(np.mean(e**2)),
-        "p95_abs": np.percentile(np.abs(e), 95),
-        "max_abs": np.max(np.abs(e)),
-    }
+    if(len(e) == 0):
+        return {
+            "bias": np.nan,
+            "mae": np.nan,
+            "rmse": np.nan,
+            "p95_abs": np.nan,
+            "max_abs": np.nan,
+        }
+    else:
+        return {
+            "bias": np.mean(e),
+            "mae": np.mean(np.abs(e)),
+            "rmse": np.sqrt(np.mean(e**2)),
+            "p95_abs": np.percentile(np.abs(e), 95),
+            "max_abs": np.max(np.abs(e)),
+        }
 
 
 def print_metrics(name, e):
