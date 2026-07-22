@@ -2,6 +2,7 @@ import argparse
 import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
+import utils.loadsave as ls
 
 
 parser = argparse.ArgumentParser(description="Generate step data acording to the given arguments and save them to a file")
@@ -21,16 +22,20 @@ data = data + args.stepHeight * (t > args.stepTime)
 
 packedData = np.column_stack((t, data))
 
-strHeader = f"Data generated with generateStepData.py script."
-strHeader += str.format("\nTimeStep= {ts} EndTime = {et} bias = {b} stepTime = {st} stepHeight = {sh}", ts=args.timeStep, et=args.endTime, b=args.bias, st=args.stepTime, sh=args.stepHeight)
-strHeader += "\ntime, data"
-np.savetxt(fname=args.outputFile, X=packedData, header=strHeader, delimiter=",")
+strHeader = f"Data generated with generateStepData.py script.\n"
+strHeader += str.format("TimeStep= {ts} EndTime = {et} bias = {b} stepTime = {st} stepHeight = {sh}", ts=args.timeStep, et=args.endTime, b=args.bias, st=args.stepTime, sh=args.stepHeight)
+
+ls.save_array(
+    filename=args.outputFile,
+    data=packedData,
+    column_names=["time", "signal"],
+    comment=strHeader)
 
 if args.plot:
     plt.figure()
     plt.plot(t, data, label="output data")
     plt.xlabel("Time [s]")
-    plt.ylabel("data")
+    plt.ylabel("signal")
     plt.legend()
     plt.grid(True)
 

@@ -2,7 +2,7 @@ import argparse
 import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
-
+from utils import loadsave as ls
 
 
 def generate_multisine_data(
@@ -55,16 +55,20 @@ data = generate_multisine_data(t, np.column_stack((f, ph)), args.bias, args.ampl
 
 packedData = np.column_stack((t, data))
 
-strHeader = f"Data generated with generateMultisineData.py script."
-strHeader += str.format("\nTimeStep= {ts} EndTime = {et} bias = {b} amplitude = {a}\nfrequencies = {f}\nphases = {ph}", ts=args.timeStep, et=args.endTime, b=args.bias, a=args.amplitude, f=f, ph=ph)
-strHeader += "\ntime, data"
-np.savetxt(fname=args.outputFile, X=packedData, header=strHeader, delimiter=",")
+strHeader = f"Data generated with generateMultisineData.py script.\n"
+strHeader += str.format("TimeStep= {ts} EndTime = {et} bias = {b} amplitude = {a}\nfrequencies = {f} phases = {ph}", ts=args.timeStep, et=args.endTime, b=args.bias, a=args.amplitude, f=f, ph=ph)
+
+ls.save_array(
+    filename=args.outputFile,
+    data=packedData,
+    column_names=["time", "signal"],
+    comment=strHeader)
 
 if args.plot:
     plt.figure()
     plt.plot(t, data, label="output data")
     plt.xlabel("Time [s]")
-    plt.ylabel("data")
+    plt.ylabel("signal")
     plt.legend()
     plt.grid(True)
 

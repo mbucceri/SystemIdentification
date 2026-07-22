@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from simulation import sim_ground_truth as gtsim
-from trajectories import sin_trajectory 
+from VerticalJointId.simulation import sim_ground_truth as gtsim
+from VerticalJointId.trajectories import sin_trajectory 
 
 gtparams = gtsim.VerticalJointParams()
 # gtparams.system.dt = 1e-3

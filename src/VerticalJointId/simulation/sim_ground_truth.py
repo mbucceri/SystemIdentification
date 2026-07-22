@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import deque
 import numpy as np
-from simulation import params_system as psys
-from simulation import params_model as pmod
+from VerticalJointId.simulation import params_system as psys
+from VerticalJointId.simulation import params_model as pmod
 
 @dataclass
 class VerticalJointParams:

@@ -6,11 +6,11 @@
       "type": "python", // python to run without the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/identification/identify_one_trajectory.py",
-      "cwd": "${workspaceFolder}/src/VerticalJointId",
+      "cwd": "${workspaceFolder}/src",
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/src/VerticalJointId"
+        "PYTHONPATH": "${workspaceFolder}/src"
       }
     },
     {
@@ -18,11 +18,11 @@
       "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/tests/test_groundTruth.py",
-      "cwd": "${workspaceFolder}/src/VerticalJointId",
+      "cwd": "${workspaceFolder}/src",
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/src/VerticalJointId"
+        "PYTHONPATH": "${workspaceFolder}/src"
       },
     },
     {
@@ -42,11 +42,11 @@
       "type": "python", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/tests/test_multisine.py",
-      "cwd": "${workspaceFolder}/src/VerticalJointId",
+      "cwd": "${workspaceFolder}/src",
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/src/VerticalJointId"
+        "PYTHONPATH": "${workspaceFolder}/src"
       }
     },
     {
@@ -60,6 +60,27 @@
       "env": {
         "PYTHONPATH": "${workspaceFolder}/src/experiments"
       }
+    },
+    {
+      "name": "Generate MultiSine",
+      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
+      "request": "launch",
+      "program": "${workspaceFolder}/src/experiments/10-MultiSine/generateMultiSineData.py",
+
+      "args": ["-ts", "0.001",
+            "-et", "10.0",
+            "-b", "0.0",
+            "-f", "0.2", "0.5", "0.9", "1.7", "2.8", "4.0",
+            "-ph", "0.0", "1.1", "2.2", "0.7", "1.9", "2.8",
+            "-a", "2.0",
+            "-of", "MultiSineData.csv"],
+      "cwd": "${workspaceFolder}/src/experiments/10-MultiSine",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     }
+
   ]
 }

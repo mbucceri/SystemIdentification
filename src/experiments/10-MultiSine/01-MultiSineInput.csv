@@ -1,8 +1,7 @@
 # Data generated with generateMultisineData.py script.
 # TimeStep= 0.001 EndTime = 10.0 bias = 0.0 amplitude = 2.0
-# frequencies = [0.2, 0.5, 0.9, 1.7, 2.8, 4.0]
-# phases = [0.0, 1.1, 2.2, 0.7, 1.9, 2.8]
-# time, data
+# frequencies = [0.2, 0.5, 0.9, 1.7, 2.8, 4.0] phases = [0.0, 1.1, 2.2, 0.7, 1.9, 2.8]
+# time,signal
 0.000000000000000000e+00,1.574000769324455096e+00
 1.000000000000000021e-03,1.564384268860858462e+00
 2.000000000000000042e-03,1.554508723887566557e+00

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import numpy as np
-import simulation.params_model as ModelParams
+import VerticalJointId.simulation.params_model as ModelParams
 
 # ============================================================
 # Parameters

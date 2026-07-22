@@ -2,24 +2,25 @@ from __future__ import annotations
 
 import numpy as np
 import matplotlib.pyplot as plt
-from VerticalJointId.trajectories import multisine_trajectory
+from trajectories import multisine_trajectory
 from scipy.optimize import least_squares
-import VerticalJointId.simulation.params_system as SystemParams 
-import VerticalJointId.simulation.params_model as ModelParams
+import simulation.params_system as SystemParams 
+import simulation.params_model as ModelParams
 import analyze_uncertainities as AnalyzeUncertainities
+import utils
 
 
 # ============================================================
 # Adapt these imports to your actual project names
 # ============================================================
-from VerticalJointId.simulation.sim_ground_truth import (
+from simulation.sim_ground_truth import (
     VerticalJointParams,
     VerticalJointState,
     VerticalPrismaticJointSimulator,
     motor_to_linear_gain,
 )
 
-from VerticalJointId.simulation.sim_simplified import (
+from simulation.sim_simplified import (
     SimplifiedVerticalJointParams,
     SimplifiedVerticalJointState,
     SimplifiedVerticalPrismaticJointSimulator,
@@ -120,29 +121,11 @@ def holding_current_ground_truth(params: VerticalJointParams) -> float:
 #    params.encoders.motor_encoder_noise_std = 1.0e-4
 #    return params
 
-def generate_ground_truth_dataset() -> dict:
+def load_ground_truth_dataset(path:str ) -> dict:
 
-    dt = SystemParams.SystemParams.dt
-    t_end = 10.0
-    t = np.arange(0.0, t_end, dt)
+    print(f"Loading experiment data: {path}")
 
-    # i_hold = holding_current_ground_truth(gt_params)
-    i_hold = 0.4  # A reasonable guess for the holding current. You can adjust this value based on your system.
-
-    print(f"Estimated holding current: {i_hold:.6f} A")
-
-    # Frequencies in Hz. Keep them moderate for a first test.
-    freqs_phases = np.array([(0.2, 0.0), (0.5, 1.1), (0.9, 2.2), (1.7, 0.7), (2.8, 1.9), (4.0, 2.8)])
-
-    desired_current = multisine_trajectory.generate_current_excitation(
-        t=t,
-        freqs_and_phases=freqs_phases,
-        bias_current=i_hold,
-        amplitude=1.5,
-        ramp_time=1.0,
-        current_min=-3.0,
-        current_max=3.0,
-    )
+    inputData = utils.loadsave.load_array(path)
 
     initial_state = VerticalJointState(
         motor_current=0.0,
@@ -157,10 +140,11 @@ def generate_ground_truth_dataset() -> dict:
         seed=10,
     )
 
-    data = sim.simulate(desired_current)
+    data = sim.simulate(inputData["signal"])
 
-    data["time"] = t
-    data["desired_current"] = desired_current
+    # enrich computed data with the input values
+    data["time"] = inputData["time"]
+    data["desired_current"] = inputData["signal"]
 
     return {
         #v"params": gt_params,
@@ -369,9 +353,9 @@ def residual_function(
 
 def main() -> None:
     # --------------------------------------------------------
-    # 1. Generate synthetic ground-truth data
+    # 1. Load real experiment data data
     # --------------------------------------------------------
-    gt = generate_ground_truth_dataset()
+    gt = load_ground_truth_dataset()
 
     # gt_params = gt["params"]
     gt_data = gt["data"]
