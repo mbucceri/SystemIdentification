@@ -1,13 +1,13 @@
 from __future__ import annotations
-
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pathlib
 import utils.loadsave
 
-from VerticalJointId.simulation import params_system as SystemParams 
-from VerticalJointId.simulation import params_model as ModelParams
+from VerticalJointId.Params import params_system as SystemParams
+from VerticalJointId.Params import params_model as ModelParams
 
 import VerticalJointId.simulation.sim_simplified as simpleSim 
 
@@ -20,8 +20,8 @@ def main() -> None:
     # 0. Argument parsing
     # --------------------------------------------------------
     parser = argparse.ArgumentParser(description="Run the vertical joint simplified simulation model using the input data")
-    parser.add_argument("-if", "--inputFile", help="The input data file", type=pathlib.Path, default="./inputData.csv")
-    parser.add_argument("-of", "--outputFile", help="The output file containing the simulated data", type=pathlib.Path, default="./groundTruth.csv")
+    parser.add_argument("-if", "--inputFile", help="The input data file, containig the input signals", type=pathlib.Path, default="./inputData.csv")
+    parser.add_argument("-of", "--outputFile", help="The output file containing the simulated telemetry", type=pathlib.Path, default="./simplified.csv")
     parser.add_argument("-p", "--plot", help="Plot data",  action='store_true')
 
     args = parser.parse_args()
@@ -56,7 +56,8 @@ def main() -> None:
     # --------------------------------------------------------
     # 3. Save and plot results
     # --------------------------------------------------------
-    utils.loadsave.save_dict(args.outputFile, simulatedData, "This is the header")
+    fileHeader = "Running simulation using simplified model.\nFull command line is: " + " ".join(sys.argv) + "\n"
+    utils.loadsave.save_dict(args.outputFile, simulatedData, f"{fileHeader}")
 
     if args.plot:
         plot_results(simulatedData)

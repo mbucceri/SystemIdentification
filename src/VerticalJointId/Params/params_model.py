@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 # ============================================================
 # Parameters
 # ============================================================
-
 @dataclass
 class MotorControllerParams:
     latency_ms: float = 2.0
@@ -13,7 +12,6 @@ class MotorControllerParams:
     integral_saturation: float = 1.0
     voltage_limit: float = 48.0
 
-
 @dataclass
 class MotorParams:
     torque_constant: float = 0.08       # Kt [Nm/A]
@@ -21,32 +19,27 @@ class MotorParams:
     rotor_inertia: float = 2.0e-4       # Jm [kg m^2]
     winding_resistance: float = 1.2     # R [ohm]
     winding_inductance: float = 1.5e-3  # L [H]
-
+    viscous_friction:float = 0.0        # B [Nm/(rad/s)]
 
 @dataclass
 class GearboxParams:
     reduction_ratio: float = 25.0       # N = omega_motor / omega_screw
     inertia_motor_side: float = 1.0e-4  # [kg m^2], already motor-side
-    viscous_friction: float = 1.0e-4    # [Nm s/rad], motor-side
+    viscous_friction: float = 1.0e-4    # [Nm / (rad/s)], motor-side
     coulomb_friction: float = 0.02      # [Nm], motor-side
-
 
 @dataclass
 class LinearScrewParams:
     pitch: float = 0.02                # [m/rev]
-    viscous_friction_linear: float = 30.0   # [N s/m]
+    viscous_friction_linear: float = 30.0   # [N/(m/s)]
     coulomb_friction_linear: float = 15.0   # [N]
     inertia_motor_side: float = 0.0         # optional [kg m^2]
-
 
 @dataclass
 class EndEffectorParams:
     mass: float = 30  # [kg]
 
-
 @dataclass
 class EncoderParams:
-    motor_encoder_noise_std: float = 1e-4    # [rad]
-    linear_encoder_noise_std: float = 1e-5   # [m]
-    motor_encoder_quantization: float | None = None   # [rad]
-    linear_encoder_quantization: float | None = None  # [m]
+    encoder_noise_std: float = 1e-4    # [rad]
+    encoder_quantization: float | None = None   # [rad/count or m/count]

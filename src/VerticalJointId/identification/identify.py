@@ -5,8 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 
-import VerticalJointId.simulation.params_system as SystemParams 
-import VerticalJointId.simulation.params_model as ModelParams
+import VerticalJointId.Params.params_system as SystemParams
+import VerticalJointId.Params.params_model as ModelParams
 import analyze_uncertainities as AnalyzeUncertainities
 import utils.loadsave
 

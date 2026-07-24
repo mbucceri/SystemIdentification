@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import deque
 import numpy as np
-from VerticalJointId.simulation import params_system as psys
-from VerticalJointId.simulation import params_model as pmod
+from VerticalJointId.Params import params_system as psys
+from VerticalJointId.Params import params_model as pmod
+from VerticalJointId.Params.Database.Encoder import Generic as GenericEncoders
 
 @dataclass
 class VerticalJointParams:
@@ -14,7 +15,8 @@ class VerticalJointParams:
     gearbox: pmod.GearboxParams = field(default_factory=pmod.GearboxParams)
     screw: pmod.LinearScrewParams = field(default_factory=pmod.LinearScrewParams)
     end_effector: pmod.EndEffectorParams = field(default_factory=pmod.EndEffectorParams)
-    encoders: pmod.EncoderParams = field(default_factory=pmod.EncoderParams)
+    motor_encoder: pmod.EncoderParams = field(default=GenericEncoders.GENERIC_ROTARY_ENCODER_2048_CPR)
+    linear_encoder: pmod.EncoderParams = field(default=GenericEncoders.GENERIC_LINEAR_ENCODER_4096_COUNTS_PER_MM)
 
     # Small velocity used to smooth Coulomb/static friction
     friction_smoothing_velocity: float = 1e-3  # [rad/s]
@@ -278,26 +280,27 @@ def encoder_measurements(
     """
     Motor and linear encoder measurements.
     """
-    enc = params.encoders
+    motor_encoder = params.motor_encoder
+    linear_encoder = params.linear_encoder
     kin = ideal_kinematics(state, params)
 
     motor_angle_meas = kin["motor_angle"]
     linear_position_meas = kin["linear_position"]
 
-    if enc.motor_encoder_noise_std > 0.0:
-        motor_angle_meas += rng.normal(0.0, enc.motor_encoder_noise_std)
+    if motor_encoder.encoder_noise_std > 0.0:
+        motor_angle_meas += rng.normal(0.0, motor_encoder.encoder_noise_std)
 
-    if enc.linear_encoder_noise_std > 0.0:
-        linear_position_meas += rng.normal(0.0, enc.linear_encoder_noise_std)
+    if linear_encoder.encoder_noise_std > 0.0:
+        linear_position_meas += rng.normal(0.0, linear_encoder.encoder_noise_std)
 
     motor_angle_meas = quantize(
         motor_angle_meas,
-        enc.motor_encoder_quantization,
+        motor_encoder.encoder_quantization,
     )
 
     linear_position_meas = quantize(
         linear_position_meas,
-        enc.linear_encoder_quantization,
+        linear_encoder.encoder_quantization,
     )
 
     return {

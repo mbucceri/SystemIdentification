@@ -16,7 +16,7 @@
     },
     {
       "name": "Run Model - Ground Truth",
-      "type": "python", // python to run withou the debugger, debugpy to run with the debugger
+      "type": "debugpy", // python to run withou the debugger, debugpy to run with the debugger
       "request": "launch",
       "program": "${workspaceFolder}/src/VerticalJointId/simulation/runModel_groundTruth.py",
       "cwd": "${workspaceFolder}/src",
@@ -36,7 +36,7 @@
       "program": "${workspaceFolder}/src/VerticalJointId/simulation/runModel_simplified.py",
       "cwd": "${workspaceFolder}/src",
       "args": ["-if", "${workspaceFolder}/src/InputData/10-MultiSine/01-MultiSineInput.csv",
-                "-of", "${workspaceFolder}/src/VerticalJointId/experiments/01-MultiSineTelemetry_groundTruth.csv",
+                "-of", "${workspaceFolder}/src/VerticalJointId/experiments/01-MultiSineTelemetry_simplified.csv",
                 "-p"],
       "console": "integratedTerminal",
       "justMyCode": false,

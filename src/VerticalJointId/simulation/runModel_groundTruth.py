@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,8 +7,8 @@ import argparse
 import pathlib
 import utils.loadsave
 
-from VerticalJointId.simulation import params_system as SystemParams 
-from VerticalJointId.simulation import params_model as ModelParams
+from VerticalJointId.Params import params_system as SystemParams
+from VerticalJointId.Params import params_model as ModelParams
 
 # ============================================================
 # Adapt these imports to your actual project names
@@ -68,7 +69,8 @@ def main() -> None:
     # --------------------------------------------------------
     # 3. Save and plot results
     # --------------------------------------------------------
-    utils.loadsave.save_dict(args.outputFile, simulatedData, "This is the header")
+    fileHeader = "Running simulation using ground_truth model.\nFull command line is: " + " ".join(sys.argv) + "\n"
+    utils.loadsave.save_dict(args.outputFile, simulatedData, f"{fileHeader}")
 
     if args.plot:
         plot_results(simulatedData)
