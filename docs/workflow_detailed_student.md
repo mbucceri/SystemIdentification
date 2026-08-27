@@ -6,11 +6,15 @@
 
 This is the student-oriented companion to `workflow_detailed_proposed_revised.md`. Both documents use the same phase structure.
 
-| This guide | Engineering guide |
-|---|---|
+
+| This guide                                                    | Engineering guide                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Explains why each activity is required and provides examples. | Defines required inputs, outputs, gates, and acceptance evidence. |
-| Includes small MATLAB and configuration snippets. | Avoids training material unless required to execute the process. |
-| Adds supporting appendices. | Assumes the reader already knows the underlying mathematics. |
+| Includes small MATLAB and configuration snippets.             | Avoids training material unless required to execute the process.  |
+| Adds supporting appendices.                                   | Assumes the reader already knows the underlying mathematics.      |
+
+
+
 
 ### What you are building
 
@@ -20,13 +24,15 @@ You are building a numerical digital twin that predicts generalized joint effort
 tau_i = yp(q, qdot, qddot) * P_i * theta_b
 ```
 
-| Symbol | Meaning |
-|---|---|
+
+| Symbol               | Meaning                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `q`, `qdot`, `qddot` | Link-side generalized position, velocity, and acceleration. `q` is rad for a revolute joint and m for a prismatic joint. |
-| `yp` | PSDM basis-function row evaluated at a joint state. |
-| `P_i` | PSDM reduction matrix for joint `i`. |
-| `theta_b` | Base inertial parameter vector. |
-| `tau_i` | Generalized effort. Nm for a revolute joint and N for a prismatic joint. |
+| `yp`                 | PSDM basis-function row evaluated at a joint state.                                                                      |
+| `P_i`                | PSDM reduction matrix for joint `i`.                                                                                     |
+| `theta_b`            | Base inertial parameter vector.                                                                                          |
+| `tau_i`              | Generalized effort. Nm for a revolute joint and N for a prismatic joint.                                                 |
+
 
 The raw motor-drive encoder count is **not** PSDM `q`.
 
@@ -54,12 +60,14 @@ Use the sources in this order:
 1. **PSDM-README.pdf**, for the MATLAB calling syntax and PSDM DH convention.
 2. **Lloyd et al. Denso application preprint**, for the experimental calibration sequence.
 3. **Lloyd et al. (2021)**, for the PSDM theory and the treatment of revolute and prismatic coordinates.
-4. **`critical_ambiguities.md`**, for existing decision gates around effort scaling and time derivatives.
-5. **The checked-out `CarletonABL/PSDM` source**, for function behavior and dimensions.
+4. `critical_ambiguities.md`, for existing decision gates around effort scaling and time derivatives.
+5. **The checked-out** `CarletonABL/PSDM` **source**, for function behavior and dimensions.
 
 The examples in this guide are implementation illustrations. Values such as sign, ratio, encoder reference, and ball-screw lead must come from the robot evidence, not from the example.
 
 ## Prerequisites
+
+
 
 ### Software setup
 
@@ -97,6 +105,8 @@ Before logging data, collect:
 - [ ] Joint position, velocity, acceleration, and effort limits.
 - [ ] Robot base orientation and gravity direction.
 
+
+
 ### Project files to create
 
 ```text
@@ -122,11 +132,13 @@ project/
 
 For every axis, keep these names separate:
 
-| Layer | Symbol | Example unit | Meaning |
-|---|---|---|---|
-| Drive telemetry | `c_i` | encoder counts | What the motor drive reports. |
-| Motor shaft | `phi_i` | rad | Motor angle after count-to-angle conversion. |
-| Kinematic joint | `q_i` | rad or m | Link-side generalized coordinate supplied to PSDM. |
+
+| Layer           | Symbol  | Example unit   | Meaning                                            |
+| --------------- | ------- | -------------- | -------------------------------------------------- |
+| Drive telemetry | `c_i`   | encoder counts | What the motor drive reports.                      |
+| Motor shaft     | `phi_i` | rad            | Motor angle after count-to-angle conversion.       |
+| Kinematic joint | `q_i`   | rad or m       | Link-side generalized coordinate supplied to PSDM. |
+
 
 A motor-side count is only equal to a kinematic joint coordinate when there is no transmission and the units already match. Your robot has transmissions, therefore you must implement the conversion.
 
@@ -163,6 +175,8 @@ Use a joint-local direction. Do not use an end-effector direction in this table.
 | J1 | revolute | rad | Right-hand rotation about +Z_J1 | J1 | [description] | 0 | [±1] | [value] | [value] | [torque convention] |
 | P3 | prismatic | m | Child link translates along +Z_P3 | P3 | [description] | 1 | [±1] | [value] | [value] | [force convention] |
 ```
+
+
 
 #### What `+q direction` means
 
@@ -320,6 +334,8 @@ Use the standard-DH convention expected by PSDM. Do not put a modified-DH table 
 5. Do not copy the encoder-reference offset into `d_i` or `theta_i` a second time.
 6. Save the candidate table with joint-name to row mapping.
 
+
+
 ### Step 1.5: Validate FK
 
 URDF-to-DH conversion is not unique. The proof that the selected table is usable is an FK comparison performed with the same canonical `q` values.
@@ -456,6 +472,8 @@ Use the same scale and sign when converting a drive-provided count-rate signal. 
 - At a small positive physical motion, `q` increases.
 - The signal stays within the documented link-side limits.
 
+
+
 ### Step 3.2: Convert current to generalized effort, Checkpoint A
 
 The Denso paper uses a joint-side effective torque constant. Generalize the notation so it remains correct for a prismatic axis:
@@ -464,10 +482,12 @@ The Denso paper uses a joint-side effective torque constant. Generalize the nota
 tau_meas_i = Keff_i * i_i
 ```
 
+
 | Joint type | `Keff_i` | `tau_meas_i` |
-|---|---|---|
-| Revolute | Nm/A | Nm |
-| Prismatic | N/A | N |
+| ---------- | -------- | ------------ |
+| Revolute   | Nm/A     | Nm           |
+| Prismatic  | N/A      | N            |
+
 
 For a prismatic axis, `Keff` combines motor torque constant, gearbox effect, ball-screw lead, signs, and the documented efficiency policy.
 
@@ -483,12 +503,14 @@ The Jacobian transpose returns a torque for a revolute row and a force for a pri
 
 ### Step 3.3: Design trajectories
 
-| Activity | Required trajectory property |
-|---|---|
-| Effort-scale calibration | Slow forward and reverse motion, known added mass. |
-| Gravity fit | Slow motion, low inertial effect, outside static friction. |
-| Friction fit | One-axis sinusoids, multiple amplitudes and speeds. |
-| Inertial fit | Rich coordinated acceleration and velocity excitation. |
+
+| Activity                 | Required trajectory property                               |
+| ------------------------ | ---------------------------------------------------------- |
+| Effort-scale calibration | Slow forward and reverse motion, known added mass.         |
+| Gravity fit              | Slow motion, low inertial effect, outside static friction. |
+| Friction fit             | One-axis sinusoids, multiple amplitudes and speeds.        |
+| Inertial fit             | Rich coordinated acceleration and velocity excitation.     |
+
 
 All trajectory limits must be applied after conversion to canonical rad/m units.
 
@@ -497,6 +519,8 @@ All trajectory limits must be applied after conversion to canonical rad/m units.
 1. Log raw timestamps, counts, and signed current at the EtherCAT rate.
 2. Preserve the raw data unchanged.
 3. Verify that current and position use a shared clock. If not, state the interpolation policy.
+
+
 
 ### Step 3.5: Check timestamps, Checkpoint B
 
@@ -573,6 +597,8 @@ All these terms have per-joint generalized-effort units. They are not all torque
 2. Fit or validate `Keff`.
 3. Store values in the same joint order as the DH table.
 4. Validate signs and magnitudes on held-out known-load data.
+
+
 
 #### Step 4A.2: Gravity calibration
 
@@ -683,6 +709,8 @@ model_v1.0.0/
   validation_report.md
 ```
 
+
+
 ### Step 5.4: Optional fast code generation
 
 ```matlab
@@ -710,14 +738,18 @@ A kinematic-coordinate change invalidates the raw-to-joint mapping and requires 
 
 ## Approval gates summary
 
-| Gate | Student check |
-|---|---|
-| **Gate 0** | Physical signs, canonical `q`, reference counts, and local joint directions are documented. |
-| **Gate 1** | URDF and DH FK agree for the same canonical `q` test poses. |
-| **Gate 2A** | PSDM derives and evaluates with the approved DH table. |
+
+| Gate        | Student check                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| **Gate 0**  | Physical signs, canonical `q`, reference counts, and local joint directions are documented.    |
+| **Gate 1**  | URDF and DH FK agree for the same canonical `q` test poses.                                    |
+| **Gate 2A** | PSDM derives and evaluates with the approved DH table.                                         |
 | **Gate 2B** | Coordinate conversion, effort conversion, timing, and derivative configuration are documented. |
-| **Gate 3** | Held-out generalized-effort prediction meets per-joint target metrics. |
-| **Gate 4** | Versioned model package and deployment interface reproduce validation results. |
+| **Gate 3**  | Held-out generalized-effort prediction meets per-joint target metrics.                         |
+| **Gate 4**  | Versioned model package and deployment interface reproduce validation results.                 |
+
+
+
 
 ## Reproducibility checklist
 
@@ -729,6 +761,8 @@ A kinematic-coordinate change invalidates the raw-to-joint mapping and requires 
 - [ ] All derivative and resampling settings are versioned.
 - [ ] Held-out trajectories are not used to tune parameters.
 - [ ] The model package identifies which effects PSDM includes and which it adds separately.
+
+
 
 ## Planned companion artifacts
 
@@ -748,9 +782,15 @@ The URDF helper must generate a draft and validation report. It must not invent 
 4. `critical_ambiguities.md`.
 5. CarletonABL/PSDM MATLAB implementation, recorded commit hash required for a reproducible run.
 
+
+
 # Appendices
 
+
+
 ## Appendix A: Denavit-Hartenberg parameters and joint directions
+
+
 
 ### Purpose
 
@@ -762,13 +802,19 @@ DH parameters encode the rigid geometry from base to tool. The PSDM table uses o
 T_i = Rot_z(theta_i) * Trans_z(d_i) * Trans_x(a_i) * Rot_x(alpha_i)
 ```
 
+
+
 ### PSDM extensions
 
-| Parameter | Meaning |
-|---|---|
-| `t_i = 0` | Revolute joint. `q_i` enters `theta_i`. |
-| `t_i = 1` | Prismatic joint. `q_i` enters `d_i`. |
+
+| Parameter          | Meaning                                                               |
+| ------------------ | --------------------------------------------------------------------- |
+| `t_i = 0`          | Revolute joint. `q_i` enters `theta_i`.                               |
+| `t_i = 1`          | Prismatic joint. `q_i` enters `d_i`.                                  |
 | `s_i = +1` or `-1` | Sign between canonical physical `q_i` and the increasing DH variable. |
+
+
+
 
 ### Why DH sign is not encoder scaling
 
@@ -786,6 +832,8 @@ For a prismatic joint, `+q` is positive local translation. For example, `child l
 
 ## Appendix B: Least squares regression (primer)
 
+
+
 ### Linear model
 
 ```
@@ -796,6 +844,8 @@ y = Y * theta
 - `theta`: `l x 1` parameters to find.
 - `y`: `N x 1` measured generalized effort values (stacked).
 
+
+
 ### MATLAB solution
 
 ```matlab
@@ -803,15 +853,21 @@ theta = Y \ y;                    % QR-based, preferred
 % equivalent: theta = pinv(Y) * y;
 ```
 
+
+
 ### When it fails
 
 - **Too few samples:** `N < l` (underdetermined). Collect more data.
 - **Collinear columns:** `cond(Y)` very large (see Appendix C).
-- **Wrong signs in `y`:** fix conventions before tuning `lambda`.
+- **Wrong signs in** `y`**:** fix conventions before tuning `lambda`.
 
 ---
 
+
+
 ## Appendix C: Condition number and regularization
+
+
 
 ### Condition number
 
@@ -819,16 +875,20 @@ theta = Y \ y;                    % QR-based, preferred
 c = cond(Y);
 ```
 
-| Value | Interpretation |
-|-------|----------------|
-| `c < 1e4` | Usually well-conditioned |
+
+| Value     | Interpretation                                     |
+| --------- | -------------------------------------------------- |
+| `c < 1e4` | Usually well-conditioned                           |
 | `c > 1e8` | Ill-conditioned; parameters not reliably separable |
+
 
 Improve conditioning by:
 
 - Richer excitation trajectories (especially for inertial ID).
 - Removing redundant samples.
 - Sequential calibration (Mode A).
+
+
 
 ### Ridge regression
 
@@ -841,7 +901,11 @@ Plot `||theta||` vs `||Y*theta - y||` for several `lambda` (L-curve) to pick a c
 
 ---
 
+
+
 ## Appendix D: Numerical differentiation and filtering in canonical units
+
+
 
 ### Why conversion comes before filtering
 
@@ -853,6 +917,8 @@ Differentiation amplifies noise. Convert counts into link-side rad or m first, t
 [b, a] = butter(order, fc/(fs/2));
 q_smooth = filtfilt(b, a, q, [], 2);
 ```
+
+
 
 ### Central difference
 
@@ -876,6 +942,8 @@ Validate resampling and filter choices by checking physical limits, excitation b
 
 ## Appendix E: PSDM regressor structure
 
+
+
 ### Generator vector
 
 PSDM builds basis functions from canonical joint coordinates:
@@ -898,13 +966,19 @@ Each column of `E` stores exponents for the generator factors in one PSDM basis 
 tau_i = yp * P_i * theta_b
 ```
 
+
+
 ### Gravity and dynamic columns
 
-| Term type | Relevant state dependence |
-|---|---|
-| Gravity | `q` only. |
-| Velocity terms | `q` and `qdot`. |
+
+| Term type          | Relevant state dependence |
+| ------------------ | ------------------------- |
+| Gravity            | `q` only.                 |
+| Velocity terms     | `q` and `qdot`.           |
 | Acceleration terms | `q`, `qdot`, and `qddot`. |
+
+
+
 
 ### Evaluate torque in one line
 
@@ -915,6 +989,8 @@ tau = PSDM.inverseDynamics(E, P, Theta, Q, Qd, Qdd);
 `Q`, `Qd`, and `Qdd` must all be `DOF x N` matrices in canonical joint units.
 
 ## Appendix F: RMSE and R² metrics
+
+
 
 ### RMSE, root mean square error
 
@@ -942,18 +1018,26 @@ SS_tot = sum((tau_meas_i - mean(tau_meas_i)).^2);
 R2_i = 1 - SS_res/SS_tot;
 ```
 
+
+
 ## Appendix G: From motor current to generalized effort
+
+
 
 ### Symbols
 
-| Symbol | Unit | Meaning |
-|---|---|---|
-| `c` | counts | Raw motor encoder position. |
-| `C` | counts/motor rev | Encoder scale. |
-| `R` | motor rev/output rev | Transmission reduction definition used in this guide. |
-| `L` | m/output rev | Ball-screw lead. |
-| `Kt_motor` | Nm/A | Motor-shaft torque constant. |
-| `Keff` | Nm/A or N/A | Current-to-generalized-effort scale. |
+
+| Symbol     | Unit                 | Meaning                                               |
+| ---------- | -------------------- | ----------------------------------------------------- |
+| `c`        | counts               | Raw motor encoder position.                           |
+| `C`        | counts/motor rev     | Encoder scale.                                        |
+| `R`        | motor rev/output rev | Transmission reduction definition used in this guide. |
+| `L`        | m/output rev         | Ball-screw lead.                                      |
+| `Kt_motor` | Nm/A                 | Motor-shaft torque constant.                          |
+| `Keff`     | Nm/A or N/A          | Current-to-generalized-effort scale.                  |
+
+
+
 
 ### Position conversion
 
@@ -961,6 +1045,8 @@ R2_i = 1 - SS_res/SS_tot;
 revolute:  q = q_offset + sigma_enc * 2*pi*(c-c_ref)/(C*R)
 prismatic: q = q_offset + sigma_enc * L*(c-c_ref)/(C*R)
 ```
+
+
 
 ### Generalized effort conversion
 
@@ -988,6 +1074,8 @@ From the application preprint (Eq. (12) to (14)).
 zdot_i = qdot_i - (qdot_i / g_i(qdot_i)) * z_i
 ```
 
+
+
 ### Friction generalized effort
 
 ```
@@ -1002,6 +1090,8 @@ The Denso preprint expresses this quantity as torque because its joints are revo
 g_i(qdot_i) = Fc_i + (Fs_i - Fc_i) * exp(-(qdot_i/vs_i)^2)
 ```
 
+
+
 ### Identification strategy (two steps)
 
 1. **High speed:** fit `Fc`, `Fv`, `dv` with simplified model (Eq. (20)).
@@ -1011,17 +1101,22 @@ LuGre is **nonlinear** in parameters. Use `lsqnonlin` or `fminsearch` rather tha
 
 ---
 
+
+
 ## Appendix I: Glossary
 
-| Term | Definition |
-|---|---|
-| Canonical joint coordinate `q` | Link-side generalized coordinate supplied to URDF FK, DH FK, PSDM, and regression. |
-| Drive count `c` | Raw motor encoder count. It is not automatically a joint coordinate. |
-| `encoder_to_q_sign` | Sign mapping raw count increase to physical canonical `+q`. |
-| DH sign `s_i` | Sign mapping canonical `+q` to increasing `theta_i` or `d_i` in the DH row. |
-| Generalized effort `tau` | Torque for revolute joint, force for prismatic joint. |
-| `Keff` | Current-to-generalized-effort scale, Nm/A or N/A depending on joint type. |
-| Base parameters `theta_b` | Minimal PSDM inertial combinations identified from motion. |
-| DH table | PSDM standard-DH kinematic input with columns `[a, alpha, d, theta, t, s]`. |
-| Held-out data | Validation trajectory not used to fit or tune the model. |
-| URDF | XML robot description used here as a source for a candidate kinematic chain and FK reference. |
+
+| Term                           | Definition                                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| Canonical joint coordinate `q` | Link-side generalized coordinate supplied to URDF FK, DH FK, PSDM, and regression.            |
+| Drive count `c`                | Raw motor encoder count. It is not automatically a joint coordinate.                          |
+| `encoder_to_q_sign`            | Sign mapping raw count increase to physical canonical `+q`.                                   |
+| DH sign `s_i`                  | Sign mapping canonical `+q` to increasing `theta_i` or `d_i` in the DH row.                   |
+| Generalized effort `tau`       | Torque for revolute joint, force for prismatic joint.                                         |
+| `Keff`                         | Current-to-generalized-effort scale, Nm/A or N/A depending on joint type.                     |
+| Base parameters `theta_b`      | Minimal PSDM inertial combinations identified from motion.                                    |
+| DH table                       | PSDM standard-DH kinematic input with columns `[a, alpha, d, theta, t, s]`.                   |
+| Held-out data                  | Validation trajectory not used to fit or tune the model.                                      |
+| URDF                           | XML robot description used here as a source for a candidate kinematic chain and FK reference. |
+
+
