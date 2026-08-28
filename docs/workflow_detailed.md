@@ -123,9 +123,34 @@ The joint table records the local generalized-coordinate convention. It does not
 ## Joint conventions
 | Joint | Type | q unit | +q direction, local physical meaning | Direction frame | q=0 definition | PSDM t_i | PSDM s_i | Lower | Upper | Positive generalized effort |
 |---|---|---|---|---|---|---:|---:|---:|---:|---|
-| J1 | revolute | rad | Right-hand rotation about +Z_J1 | J1 | [reference description] | 0 | [±1] | [value] | [value] | [positive torque convention] |
-| P3 | prismatic | m | Child link translates along +Z_P3 | P3 | [reference description] | 1 | [±1] | [value] | [value] | [positive axial-force convention] |
+| J1 | revolute | rad | Right-hand rotation about +Z_J1 | J1 | [reference description] | 0 | [±1] | [value] | [value] | [see definition below] |
+| P3 | prismatic | m | Child link translates along +Z_P3 | P3 | [reference description] | 1 | [±1] | [value] | [value] | [see definition below] |
 ```
+
+#### Column definitions: `PSDM t_i`, `PSDM s_i`, and `Positive generalized effort`
+
+These columns serve different purposes. Do not encode gearbox ratios or encoder corrections in `s_i` or in the effort column.
+
+##### `PSDM t_i` (joint-type selector)
+
+Fifth column of the PSDM DH row (PSDM-README Section 2.1). It selects which DH variable receives `q_i`:
+
+| Value | Joint type | PSDM combination (README Eq. (5)) |
+| --- | --- | --- |
+| `0` | Revolute | `theta_i* = theta_i + s_i * q_i` |
+| `1` | Prismatic | `d_i* = d_i + s_i * q_i` |
+
+Set from joint type only.
+
+##### `PSDM s_i` (DH sign)
+
+Sixth column; must be `+1` or `-1`. It defines whether increasing canonical link-side `q_i` increases (`+1`) or decreases (`-1`) the active DH variable (`theta_i` or `d_i`).
+
+Distinct from `encoder_to_q_sign` in `actuator_to_joint_map.yaml`. Assign after canonical `+q` is fixed; verify with FK validation.
+
+##### `Positive generalized effort`
+
+`tau_i` denotes generalized effort: Nm for revolute joints, N for prismatic joints (axial force). This column states how **positive** `tau_meas_i = Keff_i * i_i` relates to the local `+q` direction (for example, whether positive current produces torque or force that tends to increase `q_i`). Document any sign inversion relative to `+q` explicitly so regression labels stay consistent.
 
 For the example prismatic joint `P3`, write `+Z_P3`, not only `+Z`. Write `+Z_base` only when the axis is fixed in the base frame for every reachable preceding-joint configuration.
 

@@ -1,0 +1,57 @@
+J1:
+  joint_type: prismatic
+  encoder_counts_per_motor_rev: 8192
+  motor_revs_per_output_rev: 6
+  screw_lead_m_per_output_rev: 0.010
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
+  
+J2:
+  joint_type: revolute
+  encoder_counts_per_motor_rev: xxx
+  motor_revs_per_output_rev: xxx
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
+
+J3:
+  joint_type: prismatic
+  encoder_counts_per_motor_rev: xxx
+  motor_revs_per_output_rev: xxx
+  screw_lead_m_per_output_rev: xxx
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
+
+J4:
+  joint_type: revolute
+  encoder_counts_per_motor_rev: xxx
+  motor_revs_per_output_rev: xxx
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
+
+J5:
+  joint_type: revolute
+  encoder_counts_per_motor_rev: xxx
+  motor_revs_per_output_rev: xxx
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
+
+J6:
+  joint_type: revolute
+  encoder_counts_per_motor_rev: xxx
+  motor_revs_per_output_rev: xxx
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1
+
+J7:
+  joint_type: revolute
+  encoder_counts_per_motor_rev: xxx
+  motor_revs_per_output_rev: xxx
+  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
+  q_offset_at_reference: 0.0
+  encoder_to_q_sign: 1

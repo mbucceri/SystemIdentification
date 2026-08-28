@@ -33,17 +33,17 @@ Build and validate a PSDM-based inverse dynamics model for a robot manipulator u
 
 ### Phase 0 - Scope and Conventions Lock
 
-- [ ] Confirm reference frames, sign conventions, and coordinate definitions.
-- [ ] Lock URDF-to-DH convention and acceptance checks.
+- [x] Confirm reference frames, sign conventions, and coordinate definitions.
+- [x] Lock URDF-to-DH convention and acceptance checks.
 - [ ] Define data logging and preprocessing assumptions.
 
 **Outputs:** conventions sheet, execution checklist, data contract.
 
 ### Phase 1 - URDF to PSDM Kinematics
 
-- [ ] Parse URDF joint chain and transforms.
-- [ ] Build PSDM-compatible DH table `[a_i, alpha_i, d_i, theta_i, t_i, s_i]`.
-- [ ] Validate FK agreement between URDF and DH models.
+- [x] Parse URDF joint chain and transforms.
+- [x] Build PSDM-compatible DH table `[a_i, alpha_i, d_i, theta_i, t_i, s_i]`.
+- [x] Validate FK agreement between URDF and DH models.
 
 **Outputs:** approved DH table and gravity vector `g`.
 

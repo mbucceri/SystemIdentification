@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<robot name="starman_arm" xmlns:xacro="http://ros.org/wiki/xacro">
+
+
+  <xacro:property name="no_instrument" value="None"/>
+  <xacro:arg name="use_gazebo" default="true"/>
+  <xacro:arg name="instrument" default="${no_instrument}"/>
+  <xacro:arg name="base_version" default="eb3"/>              <!-- options: 'eb3', 'db2'-->
+  <xacro:arg name="polso_version" default="gen3"/>              <!-- options: 'gen3', 'gen3_5', 'gen4' -->
+  <xacro:arg name="ft_sensor_version" default="ati"/>              <!-- options: 'ati' -->
+  <xacro:arg name="ids_version" default="db1"/>              <!-- options: 'db1' -->
+
+  <xacro:property name="use_gazebo" value="$(arg use_gazebo)"/>
+  <xacro:property name="instrument" value="$(arg instrument)"/>
+  <xacro:property name="prefix" value="starman_arm"/>
+  <xacro:property name="base_version" default="$(arg base_version)"/>
+  <xacro:property name="polso_version" default="$(arg polso_version)"/>
+  <xacro:property name="ft_sensor_version" default="$(arg ft_sensor_version)"/>
+  <xacro:property name="ids_version" default="$(arg ids_version)"/>
+
+  <!-- Load per-instrument hw params directly from YAML (single source of truth) -->
+  <xacro:arg name="hw_params_yaml" default="../config/instrument_hw_params.yaml"/>
+  <xacro:property name="_hw_yaml" value="${xacro.load_yaml('$(arg hw_params_yaml)')}" />
+  <xacro:property name="_hw" value="${_hw_yaml.get(instrument, dict())}" />
+
+  <xacro:property name="adapter_length_m" value="${_hw.get('adapter_length_m', 0.0)}" />
+  <xacro:property name="shaft_length_m" value="${_hw.get('shaft_length_m', 0.0)}" />
+  <xacro:property name="angular_limit_wrist_1_rad" value="${_hw.get('angular_limit_wrist_1_rad', 0.0)}" />
+  <xacro:property name="angular_limit_wrist_2_rad" value="${_hw.get('angular_limit_wrist_2_rad', 0.0)}" />
+  <xacro:property name="lower_angular_limit_jaw_rad" value="${_hw.get('lower_angular_limit_jaw_rad', 0.0)}" />
+  <xacro:property name="upper_angular_limit_jaw_rad" value="${_hw.get('upper_angular_limit_jaw_rad', 0.0)}" />
+  <xacro:property name="clevis_length_m" value="${_hw.get('clevis_length_m', 0.0)}" />
+  <xacro:property name="jaw_length_from_pin_to_tip_m" value="${_hw.get('jaw_length_from_pin_to_tip_m', 0.0)}" />
+  <xacro:property name="clevis_radius_m" value="${_hw.get('clevis_radius_m', 0.0)}" />
+  <xacro:property name="functional_jaw_length_m" value="${_hw.get('functional_jaw_length_m', 0.0)}" />
+  <xacro:property name="jaw_radius_m" value="${_hw.get('jaw_radius_m', 0.0)}" />
+
+  <xacro:include filename="../xacro/macro.materials.xacro"/>
+  <xacro:include filename="../xacro/macro.starman.xacro"/>
+  <xacro:include filename="../xacro/macro.arm_base.xacro" />
+  <xacro:include filename="../xacro/macro.arm_polso.xacro" />
+  <xacro:include filename="../xacro/macro.arm_ft_sensor.xacro" />
+  <xacro:include filename="../xacro/macro.arm_ids.xacro" />
+  <xacro:include filename="../xacro/macro.instrument.xacro" />
+  <xacro:include filename="../xacro/macro.gazebo.xacro" />
+
+  <!-- Build-time configuration embedded for traceability -->
+  <asensus_build_config
+    base_version="$(arg base_version)"
+    polso_version="$(arg polso_version)"
+    ft_sensor_version="$(arg ft_sensor_version)"
+    ids_version="$(arg ids_version)"
+    instrument="$(arg instrument)"
+    use_gazebo="$(arg use_gazebo)"/>
+
+  <xacro:rviz_colors/>
+
+  <!-- ADD ARM LINKS/JOINTS -->
+  <link name="${prefix}_map"></link>
+
+  <link name="${prefix}_camera"></link>
+
+  <joint name="${prefix}_dummy_camera" type="fixed">
+    <parent link="${prefix}_map"/>
+    <child link="${prefix}_camera"/>
+    <origin rpy="0.0 0.0 1.57" xyz="1.7 -0.3 1.0"/>
+  </joint>
+
+  <xacro:arm_base_chain base_version="${base_version}" parent_interface_link="${prefix}_map" child_interface_link="${prefix}_base_polso_interface"/>
+
+  <link name="${prefix}_base_polso_interface"></link>
+
+  <xacro:arm_polso_chain polso_version="${polso_version}" parent_interface_link="${prefix}_base_polso_interface" child_interface_link="${prefix}_polso_ft_sensor_interface"/>
+
+  <link name="${prefix}_polso_ft_sensor_interface"></link>
+
+  <xacro:arm_ft_sensor_chain ft_sensor_version="${ft_sensor_version}" parent_interface_link="${prefix}_polso_ft_sensor_interface" child_interface_link="${prefix}_ft_sensor_ids_interface"/>
+
+  <link name="${prefix}_ft_sensor_ids_interface"></link>
+
+  <xacro:arm_ids_chain ids_version="${ids_version}" parent_interface_link="${prefix}_ft_sensor_ids_interface" child_interface_link="${prefix}_ids_instrument_interface"/>
+
+  <link name="${prefix}_ids_instrument_interface"></link>
+
+  <xacro:add_instrument_chain
+    instrument="${instrument}"
+    parent_interface_link="${prefix}_ids_instrument_interface"
+    use_gazebo="${use_gazebo}"
+    prefix="${prefix}"
+    adapter_length_m="${adapter_length_m}"
+    shaft_length_m="${shaft_length_m}"
+    angular_limit_wrist_1_rad="${angular_limit_wrist_1_rad}"
+    angular_limit_wrist_2_rad="${angular_limit_wrist_2_rad}"
+    lower_angular_limit_jaw_rad="${lower_angular_limit_jaw_rad}"
+    upper_angular_limit_jaw_rad="${upper_angular_limit_jaw_rad}"
+    clevis_length_m="${clevis_length_m}"
+    jaw_length_from_pin_to_tip_m="${jaw_length_from_pin_to_tip_m}"/>
+
+  <xacro:if value="${use_gazebo}">
+    <xacro:add_gazebo_block instrument="${instrument}" prefix="${prefix}"/>
+  </xacro:if>
+
+</robot>

@@ -96,14 +96,14 @@ PSDM.make();
 
 Before logging data, collect:
 
-- [ ] URDF matching the selected physical robot and tool configuration.
-- [ ] Encoder scale for each actuator.
-- [ ] Gearbox definition, including which side is numerator and which side is denominator.
-- [ ] Ball-screw lead for every prismatic axis.
-- [ ] Encoder count at the selected physical kinematic zero.
-- [ ] Motor torque constant and signed-current convention.
-- [ ] Joint position, velocity, acceleration, and effort limits.
-- [ ] Robot base orientation and gravity direction.
+- [x] URDF matching the selected physical robot and tool configuration.
+- [x] Encoder scale for each actuator.
+- [x] Gearbox definition, including which side is numerator and which side is denominator.
+- [x] Ball-screw lead for every prismatic axis.
+- [x] Encoder count at the selected physical kinematic zero.
+- [x] Motor torque constant and signed-current convention.
+- [x] Joint position, velocity, acceleration, and effort limits.
+- [x] Robot base orientation and gravity direction.
 
 
 
@@ -170,11 +170,72 @@ Use a joint-local direction. Do not use an end-effector direction in this table.
 - Reference posture q_ref: [q1_ref, ..., qn_ref]
 
 ## Joint conventions
-| Joint | Type | q unit | +q direction, local physical meaning | Direction frame | q=0 definition | t_i | s_i | Lower | Upper | Positive generalized effort |
+| Joint | Type | q unit | +q direction, local physical meaning | Direction frame | q=0 definition | PSDM t_i | PSDM s_i | Lower | Upper | Positive generalized effort |
 |---|---|---|---|---|---|---:|---:|---:|---:|---|
-| J1 | revolute | rad | Right-hand rotation about +Z_J1 | J1 | [description] | 0 | [±1] | [value] | [value] | [torque convention] |
-| P3 | prismatic | m | Child link translates along +Z_P3 | P3 | [description] | 1 | [±1] | [value] | [value] | [force convention] |
+| J1 | revolute | rad | Right-hand rotation about +Z_J1 | J1 | [description] | 0 | [±1] | [value] | [value] | [see definition below] |
+| P3 | prismatic | m | Child link translates along +Z_P3 | P3 | [description] | 1 | [±1] | [value] | [value] | [see definition below] |
 ```
+
+#### Column definitions: `PSDM t_i`, `PSDM s_i`, and `Positive generalized effort`
+
+These three columns belong to different layers of the model. Do not mix them with encoder scaling or gearbox ratios.
+
+##### `PSDM t_i` (joint-type selector)
+
+`t_i` is the fifth column of the PSDM DH row. It tells PSDM which DH variable receives the generalized coordinate `q_i` (PSDM-README Section 2.1; Eq. (5) in the README).
+
+| Value | Joint type | Effect |
+| --- | --- | --- |
+| `0` | Revolute | `q_i` (rad) enters the joint angle term: `theta_i* = theta_i + (1 - t_i) * s_i * q_i` simplifies to `theta_i + s_i * q_i`. |
+| `1` | Prismatic | `q_i` (m) enters the link-offset term: `d_i* = d_i + t_i * s_i * q_i` simplifies to `d_i + s_i * q_i`. |
+
+Set `t_i` from the mechanical joint type only. It is not measured from telemetry and it is not a sign correction.
+
+##### `PSDM s_i` (DH sign, not encoder sign)
+
+`s_i` is the sixth column of the PSDM DH row. It may only be `+1` or `-1` (PSDM-README Section 2.1).
+
+It answers one kinematic question: when canonical link-side `q_i` increases by a small amount, does the active DH variable (`theta_i` for revolute, `d_i` for prismatic) increase or decrease?
+
+| Value | Meaning |
+| --- | --- |
+| `+1` | Increasing canonical `q_i` increases the active DH variable. |
+| `-1` | Increasing canonical `q_i` decreases the active DH variable. |
+
+`s_i` is **not** `encoder_to_q_sign`. The encoder sign maps raw counts to canonical `q_i`. `s_i` maps canonical `q_i` into the PSDM DH row. A gearbox ratio never belongs in `s_i`.
+
+**Assignment recipe:**
+1. Fix canonical `+q` in the `+q direction` column first.
+2. Build the standard-DH frame assignment for that joint.
+3. Check whether a positive increment of `q_i` increases `theta_i` (revolute) or `d_i` (prismatic) in that assignment.
+4. Set `s_i = +1` if yes, `s_i = -1` if no.
+5. Confirm with URDF-vs-DH FK validation (Phase 1, Step 1.3).
+
+See Step 0.5 for the full separation between telemetry sign and DH sign.
+
+##### `Positive generalized effort`
+
+Generalized effort is the scalar effort variable on the right-hand side of the joint equation of motion. PSDM and this workflow use the symbol `tau_i` for every joint, but the physical unit depends on joint type:
+
+| Joint type | Symbol | Unit | Physical quantity |
+| --- | --- | --- | --- |
+| Revolute | `tau_i` | Nm | Joint torque about the joint axis. |
+| Prismatic | `tau_i` | N | Joint force along the joint axis (axial force). |
+
+This column documents the **sign convention** for measured effort after current conversion:
+
+```text
+tau_meas_i = Keff_i * i_i
+```
+
+Write a short, testable statement that links positive effort to the local `+q` direction already defined in the table. Examples:
+
+- Revolute: `Positive tau_i is CCW torque about +Z_J1 when viewed from the parent link; it tends to increase q_i in the +q direction.`
+- Prismatic: `Positive tau_i is an axial force on the child link along +Z_P3; it tends to increase q_i in the +q direction.`
+
+If positive motor current produces effort opposite to `+q`, record that explicitly (for example, `positive current gives negative tau_i relative to +q`) and reflect the sign in `Keff_i` or in the documented convention so regression data stay consistent.
+
+**Do not** use this column for gearbox ratio, encoder offset, or DH frame geometry. Those belong in `actuator_to_joint_map.yaml`, DH constants, or the `+q direction` column respectively.
 
 
 
