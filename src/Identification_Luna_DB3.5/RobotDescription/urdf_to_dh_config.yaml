@@ -11,7 +11,7 @@ conventions:
     z_positive: "It will point upward."
     gravity_up: [0, 0, 1]
 
-  reference_posture: [0, 0, 0, 0, 0, 0, 0]
+  reference_posture: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
   joints:
     starman_arm_joint1:

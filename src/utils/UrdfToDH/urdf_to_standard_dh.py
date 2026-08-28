@@ -147,8 +147,9 @@ def closest_points(p1, u, p2, v):
     d, e = float(np.dot(u, w)), float(np.dot(v, w))
     den = 1.0 - b*b
     if abs(den) < EPS:
-        source = p1 + np.dot(p2 - p1, u) * u
-        return source, p2.copy(), True
+        # Parallel axes do not have a unique common normal. Preserve the
+        # URDF joint origins; their axial separation is a valid DH d offset.
+        return p1.copy(), p2.copy(), True
     s = (b*e - d) / den
     t = (e - b*d) / den
     return p1 + s*u, p2 + t*v, False
@@ -180,10 +181,14 @@ def make_dh_frames(active_axes):
         for i in range(n-1):
             p, z, _ = active_axes[i]
             next_p, next_z, _ = active_axes[i+1]
-            source, target, _ = closest_points(p, z, next_p, next_z)
+            source, target, parallel = closest_points(p, z, next_p, next_z)
             separation = target - source
-            if np.linalg.norm(separation) > EPS:
-                x = unit(separation)
+            # For parallel axes, separation may also contain a component
+            # along z. Only its transverse component defines the DH x axis;
+            # the axial component is represented by the DH d parameter.
+            transverse = separation - np.dot(separation, z) * z if parallel else separation
+            if np.linalg.norm(transverse) > EPS:
+                x = unit(transverse)
             else:
                 cross = np.cross(z, next_z)
                 if np.linalg.norm(cross) > EPS:
