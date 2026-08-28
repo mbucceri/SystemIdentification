@@ -243,6 +243,30 @@ def matrix_list(T):
     return [[small(x) for x in row] for row in T]
 
 
+def vector_text(values):
+    return "[{}]".format(", ".join(f"{small(float(x)):.12g}" for x in values))
+
+
+def convention_vector(value, field, default=None):
+    """Read a machine-readable three-element unit vector from the YAML config."""
+    if value is None:
+        return default
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        raise ValueError(f"{field} must be a YAML list containing three numbers.")
+    try:
+        vector = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must contain only numbers.") from exc
+    norm = np.linalg.norm(vector)
+    if not np.isfinite(vector).all() or abs(norm - 1.0) > 1e-8:
+        raise ValueError(f"{field} must be a finite unit vector; its norm is {norm:.12g}.")
+    return vector
+
+
+def markdown_value(value, placeholder):
+    return placeholder if value is None else str(value).replace("|", "\\|").replace("\n", " ")
+
+
 def limits(joint, cfg):
     if joint["type"] == "continuous":
         return cfg["fk_validation"]["continuous_joint_sampling_range_rad"]
@@ -315,27 +339,62 @@ def write_mapping_report(path, cfg, chain, active, DH, T_base_dh0, T_dhn_tool):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_conventions(path, cfg, active_axes):
+def write_conventions(path, cfg, active_axes, DH):
+    conventions = cfg.get("conventions", {})
+    base = conventions.get("base_frame", {})
+    joint_cfg = conventions.get("joints", {})
+    q_ref = conventions.get("reference_posture")
+    if q_ref is None:
+        q_ref_text = "[reference posture required]"
+    else:
+        if not isinstance(q_ref, (list, tuple)) or len(q_ref) != len(active_axes):
+            raise ValueError(
+                "conventions.reference_posture must contain one numeric value per active joint."
+            )
+        try:
+            q_ref_text = vector_text(q_ref)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("conventions.reference_posture must contain only numbers.") from exc
+
+    gravity = convention_vector(
+        base.get("gravity_up"), "conventions.base_frame.gravity_up"
+    )
     lines = [
-        "# Robot conventions, generated draft", "",
-        f"- URDF base link: `{cfg['urdf']['base_link']}`",
-        f"- URDF tool link: `{cfg['urdf']['tool_link']}`",
-        "- PSDM coordinate: `q_i = q_URDF,i`.",
-        "- `+q` is the positive local URDF joint axis at `q = 0`.",
-        "- For prismatic joints, `+q` is positive translation along that axis.",
-        "- For revolute joints, `+q` follows the right-hand rule about that axis.",
-        "- Motor-drive and encoder signs are outside this file and must be documented separately.", "",
-        "| Joint | Type | q unit | +q axis, joint frame | +q axis, URDF base at q=0 | Lower | Upper |",
-        "|---|---|---|---|---|---:|---:|",
+        "# Robot conventions", "", "## Base frame",
+        f"- Origin: {markdown_value(base.get('origin'), '[physical description required]')}",
+        f"- +X: {markdown_value(base.get('x_positive'), '[description required]')}",
+        f"- +Y: {markdown_value(base.get('y_positive'), '[description required]')}",
+        f"- +Z: {markdown_value(base.get('z_positive'), '[description required]')}",
+        "- Gravity vector g, unit and upward: " + (
+            vector_text(gravity) if gravity is not None else "[unit vector required]"
+        ),
+        f"- Reference posture q_ref: {q_ref_text}", "", "## Joint conventions", "",
+        "| Joint | Type | q unit | +q direction, unit vector | Direction frame | q=0 definition | PSDM t_i | PSDM s_i | Lower | Upper | Positive generalized effort, unit vector |",
+        "|---|---|---|---|---|---|---:|---:|---:|---:|---|",
     ]
-    for _, direction, joint in active_axes:
+    for (_, _, joint), row in zip(active_axes, DH):
         kind = "prismatic" if joint["type"] == "prismatic" else "revolute"
         unit_name = "m" if kind == "prismatic" else "rad"
-        local = "[{}]".format(", ".join(f"{x:.12g}" for x in unit(joint["axis"])))
-        base = "[{}]".format(", ".join(f"{x:.12g}" for x in direction))
+        local_axis = unit(joint["axis"])
+        metadata = joint_cfg.get(joint["name"], {})
+        effort_axis = convention_vector(
+            metadata.get("positive_effort"),
+            f"conventions.joints.{joint['name']}.positive_effort",
+            default=local_axis,
+        )
+        direction_frame = markdown_value(metadata.get("direction_frame"), joint["name"])
+        q_zero = markdown_value(metadata.get("q_zero_definition"), "[description required]")
         lo = "continuous" if joint["type"] == "continuous" else f"{joint['lower']:.12g}"
         hi = "continuous" if joint["type"] == "continuous" else f"{joint['upper']:.12g}"
-        lines.append(f"| `{joint['name']}` | {kind} | {unit_name} | {local} | {base} | {lo} | {hi} |")
+        lines.append(
+            f"| `{joint['name']}` | {kind} | {unit_name} | {vector_text(local_axis)} | "
+            f"{direction_frame} | {q_zero} | {int(row[4])} | {int(row[5]):+d} | "
+            f"{lo} | {hi} | {vector_text(effort_axis)} |"
+        )
+    lines += [
+        "", "For a revolute joint, the positive generalized-effort vector is a torque axis and "
+        "positive effort follows the right-hand rule. For a prismatic joint, it is a force direction."
+    ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -407,8 +466,12 @@ def main():
         write_json(output_dir / "urdf_kinematics.json", active_axes, DH, T_base_dh0, T_dhn_tool)
     if out.get("dh_mapping_report_markdown", True):
         write_mapping_report(output_dir / "dh_mapping_report.md", cfg, chain, active, DH, T_base_dh0, T_dhn_tool)
-    if out.get("conventions_sheet_draft_markdown", True):
-        write_conventions(output_dir / "conventions_sheet.draft.md", cfg, active_axes)
+    convention_sheet_enabled = out.get(
+        "convention_sheet_markdown",
+        out.get("conventions_sheet_draft_markdown", True),
+    )
+    if convention_sheet_enabled:
+        write_conventions(output_dir / "convention_sheet.md", cfg, active_axes, DH)
 
     pmax, rmax, passed = validate_fk(output_dir / "fk_validation_report.md", cfg, chain, active, DH, T_base_dh0, T_dhn_tool)
     if not out.get("fk_validation_report_markdown", True):

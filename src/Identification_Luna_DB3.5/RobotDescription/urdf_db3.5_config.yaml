@@ -3,6 +3,52 @@ urdf:
   base_link: "starman_arm_link_cart"
   tool_link: "starman_arm_ids"
 
+conventions:
+  base_frame:
+    origin: "The frame is located at the center of the robot wheels, with the Z-axis pointing up, the X-axis pointing forward, and the Y-axis pointing to the left."
+    x_positive: "It points forward, aligned along the arm boom when the arm is at its retracted position"
+    y_positive: "It will point to the left of the arm boom when the arm is at its retracted position"
+    z_positive: "It will point upward."
+    gravity_up: [0, 0, 1]
+
+  reference_posture: [0, 0, 0, 0, 0, 0, 0]
+
+  joints:
+    starman_arm_joint1:
+      direction_frame: "J1"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
+    starman_arm_joint2:
+      direction_frame: "J2"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
+    starman_arm_joint3:
+      direction_frame: "J3"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
+    starman_arm_joint4:
+      direction_frame: "J4"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
+    starman_arm_joint5:
+      direction_frame: "J5"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
+    starman_arm_joint6:
+      direction_frame: "J6"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
+    starman_arm_joint7:
+      direction_frame: "J7"
+      q_zero_definition: "Fully retracted"
+      positive_effort: [0, 0, 1]
+
 chain_features:
   contains_fixed_joints: true
   contains_mimic_joints: false
@@ -23,7 +69,7 @@ outputs:
   dh_mapping_report_markdown: true
   urdf_kinematics_json: true
   fk_validation_report_markdown: true
-  conventions_sheet_draft_markdown: true
+  convention_sheet_markdown: true
 
 fk_validation:
   random_samples: 100
