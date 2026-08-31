@@ -1,0 +1,153 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=24mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!55!black,
+  urlcolor=blue!55!black,
+  pdftitle={Manual for compare_urdf_dh_frames.m}
+}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{210,210,210}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\title{Concise Manual for \path{compare_urdf_dh_frames.m}}
+\author{Robot System Identification utilities}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Purpose}
+
+\path{compare_urdf_dh_frames.m} checks a standard Denavit--Hartenberg (DH)
+model generated from a URDF serial chain. At a user-supplied joint
+configuration, it reconstructs the DH frames, evaluates the same configuration
+with the URDF model, and compares:
+\begin{itemize}
+  \item every URDF joint axis with the corresponding DH axis $z_{i-1}$; and
+  \item the URDF and DH reconstructions of the selected tool pose.
+\end{itemize}
+It also creates a figure containing the URDF model, the DH chain, and an
+aligned overlay. The comparison is diagnostic and does not modify its inputs.
+
+\section{Requirements and inputs}
+
+The function requires MATLAB with Robotics System Toolbox. Add the utility
+folder to the MATLAB path before calling it. Its three file inputs are:
+\begin{description}
+  \item[URDF file] The source robot description.
+  \item[DH CSV] The generated \path{dh_table.csv}, including the columns
+    \path{joint}, \path{a_m}, \path{alpha_rad}, \path{d_m},
+    \path{theta_rad}, \path{t}, and \path{s}.
+  \item[Kinematics JSON] The generated \path{urdf_kinematics.json}, containing
+    the base-to-first-DH-frame and last-DH-frame-to-tool transforms.
+\end{description}
+These generated files are documented in
+\href{run:urdf_to_standard_dh_manual.pdf}{\path{urdf_to_standard_dh_manual.pdf}}.
+
+The vector \path{q} must contain one finite joint coordinate per CSV row, in
+the same order as the CSV. Angles are expressed in radians and prismatic
+coordinates in metres.
+
+\section{Function interface}
+
+\begin{lstlisting}[language=Matlab]
+result = compare_urdf_dh_frames( ...
+    urdfPath, dhCsvPath, kinematicsJsonPath, q, ...
+    'BaseLink', baseLink, ...
+    'ToolLink', toolLink, ...
+    'FrameScale', 0.08, ...
+    'ShowVisuals', true);
+\end{lstlisting}
+
+\path{BaseLink} and \path{ToolLink} are required. They select the URDF chain
+to compare and prevent unrelated branches or fixed frames from entering the
+test. \path{FrameScale} is the plotted coordinate-axis length in metres;
+its default is $0.08$. \path{ShowVisuals} enables URDF visual meshes and is
+\path{true} by default. Setting it to \path{false} can make complex models
+faster and clearer to inspect.
+
+\section{Example}
+
+\begin{lstlisting}[language=Matlab]
+addpath(fullfile('src', 'utils', 'UrdfToDH'));
+
+robotRoot = fullfile('src', 'Identification_Luna_DB3.5', ...
+    'RobotDescription');
+q = zeros(1, 7);
+
+result = compare_urdf_dh_frames( ...
+    fullfile(robotRoot, 'urdf', 'arm_with_None.urdf'), ...
+    fullfile(robotRoot, 'DH', 'dh_table.csv'), ...
+    fullfile(robotRoot, 'DH', 'urdf_kinematics.json'), ...
+    q, ...
+    'BaseLink', 'starman_arm_link_cart', ...
+    'ToolLink', 'starman_arm_ids');
+\end{lstlisting}
+
+Run the comparison at several representative configurations, not only at the
+zero pose. Configurations must respect the URDF joint-coordinate convention
+used to generate the DH model.
+
+\section{Computation and displayed result}
+
+For row $i$, the function evaluates the standard-DH transform
+\begin{equation}
+ A_i = \operatorname{RotZ}(\theta_i^*)
+       \operatorname{TransZ}(d_i^*)
+       \operatorname{TransX}(a_i)
+       \operatorname{RotX}(\alpha_i),
+\end{equation}
+where
+\begin{align}
+ \theta_i^* &= \theta_i + (1-t_i)s_iq_i, &
+ d_i^* &= d_i + t_is_iq_i.
+\end{align}
+The residual transforms from the JSON file align the reconstructed DH chain
+with the selected URDF base and tool.
+
+The figure has three panels: URDF model and body frames, generated DH frames,
+and their overlay. DH frames are labelled \path{D0}, \path{D1}, and so on;
+URDF joint axes are labelled \path{UJ1}, \path{UJ2}, and so on. The command
+window reports the tool position and orientation errors and, for each joint,
+the axis-angle error and shortest distance between the URDF and DH axis lines.
+
+\section{Returned structure and interpretation}
+
+The returned \path{result} structure contains joint names and configuration,
+the URDF and DH tool transforms, every reconstructed DH frame, joint-axis
+angle and line-distance errors, tool position and orientation errors, and the
+figure handle.
+
+For a consistent conversion, all reported errors should be close to numerical
+zero, subject to the precision of the URDF and generated files. A large tool
+error indicates a kinematic mismatch. A large per-joint angle error indicates
+an axis-direction mismatch, while a large line distance indicates that the
+two compared axes are displaced.
+
+Under the standard-DH convention, URDF joint $i$ is associated with
+$z_{i-1}$, not $z_i$. URDF body frames and DH frames are defined for different
+purposes and therefore do not need to coincide visually; joint-axis and final
+tool-pose agreement are the relevant checks.
+
+\end{document}
