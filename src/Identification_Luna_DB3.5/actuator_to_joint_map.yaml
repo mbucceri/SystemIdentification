@@ -1,57 +1,64 @@
 J1:
   joint_type: prismatic
-  encoder_counts_per_motor_rev: 8192
-  motor_revs_per_output_rev: 6
-  screw_lead_m_per_output_rev: 0.010
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 8192              # checked against base.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 6                    # checked against base.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  screw_lead_m_per_output_rev: 0.010              # checked against base.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 4096000 # checked against base.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 366095        # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0                      # checked
+  encoder_to_q_sign: 1                            # checked
   
 J2:
   joint_type: revolute
-  encoder_counts_per_motor_rev: xxx
-  motor_revs_per_output_rev: xxx
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 48000             # checked against base.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 81                   # checked against base.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 4194304 # checked against base.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 1019605       # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0                      # checked
+  encoder_to_q_sign: 1                            # checked
 
 J3:
   joint_type: prismatic
-  encoder_counts_per_motor_rev: xxx
-  motor_revs_per_output_rev: xxx
-  screw_lead_m_per_output_rev: xxx
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 22880 # checked against base.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 1 # checked against base.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  screw_lead_m_per_output_rev: 0.016 # checked against base.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 4096000 # checked against base.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 63614862 # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0 # checked
+  encoder_to_q_sign: 1 # checked
 
 J4:
   joint_type: revolute
-  encoder_counts_per_motor_rev: xxx
-  motor_revs_per_output_rev: xxx
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 22880 # checked against polso.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 120 # checked against polso.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 1048567 # checked against polso.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 601981 # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0 # checked
+  encoder_to_q_sign: 1 # checked
 
 J5:
   joint_type: revolute
-  encoder_counts_per_motor_rev: xxx
-  motor_revs_per_output_rev: xxx
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 22880 # checked against polso.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 120 # checked against polso.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 1048567 # checked against polso.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 164419 # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0 # checked
+  encoder_to_q_sign: 1 # checked
 
 J6:
   joint_type: revolute
-  encoder_counts_per_motor_rev: xxx
-  motor_revs_per_output_rev: xxx
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 22880 # checked against polso.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 120 # checked against polso.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 1048567 # checked against polso.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 37608 # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0 # checked
+  encoder_to_q_sign: 1 # checked
 
 J7:
   joint_type: revolute
-  encoder_counts_per_motor_rev: xxx
-  motor_revs_per_output_rev: xxx
-  encoder_count_at_q_zero: xxxx (get it from DS402 drives)
-  q_offset_at_reference: 0.0
-  encoder_to_q_sign: 1
+  encoder_counts_per_motor_rev: 22880 # checked against polso.xml <MotorConfiguration><CountsPerMotorRadians> params
+  motor_revs_per_output_rev: 50 # checked against polso.xml <JointConfiguration><MotorRadiansPerOutputUnit> params
+  absolute_encoder_count_per_output_unit: 1048567 # checked against polso.xml <JointConfiguration><AbsoluteCountsPerUnit> params
+  absolute_encoder_count_at_q_zero: 1227958 # got it from DS402 drives, OBJECT_IDX = 0x2F00, OBJECT_SUBIDX = 0x01
+  q_offset_at_reference: 0.0 # checked
+  encoder_to_q_sign: 1 # checked
