@@ -124,11 +124,11 @@ project/
 
 `actuator_to_joint_map.yaml` is required because `conventions_sheet.md` is readable by people but does not by itself provide the exact numeric telemetry transformation.
 
-## Phase 0: Coordinate, sign, and telemetry contract lock
+## [x] Phase 0: Coordinate, sign, and telemetry contract lock
 
 **Goal:** define one canonical coordinate system that is shared by the URDF comparison, the DH table, and the PSDM regression dataset.
 
-### Step 0.1: Understand the three coordinate layers
+### [x] Step 0.1: Understand the three coordinate layers
 
 For every axis, keep these names separate:
 
@@ -142,7 +142,7 @@ For every axis, keep these names separate:
 
 A motor-side count is only equal to a kinematic joint coordinate when there is no transmission and the units already match. Your robot has transmissions, therefore you must implement the conversion.
 
-### Step 0.2: Define frames, gravity, and the reference posture
+### [x] Step 0.2: Define frames, gravity, and the reference posture
 
 A reference frame is an origin and three orthogonal axes. The URDF, DH table, telemetry conversion, and PSDM model must all use compatible definitions.
 
@@ -154,7 +154,7 @@ g = [0; 0; 1];
 
 Define and record `q_ref`, the kinematic reference posture. This is normally the posture represented by URDF and DH zero coordinates. Also record encoder counts at that posture.
 
-### Step 0.3: Fill `conventions_sheet.md`
+### [x] Step 0.3: Fill `conventions_sheet.md`
 
 Use a joint-local direction. Do not use an end-effector direction in this table.
 
@@ -251,7 +251,7 @@ For the vertical-slide example, write `child link translates along +Z_P3`. You m
 
 The direction of end-effector motion caused by a joint depends on the robot configuration. For a downstream prismatic joint, the base-frame direction of its local axis depends on preceding joints. You do not need to set other joints to zero to define `+q`. Define it locally. Use `q_ref` only when you want to report an illustrative base-frame direction.
 
-### Step 0.4: Build `actuator_to_joint_map.yaml`
+### [In progress] Step 0.4: Build `actuator_to_joint_map.yaml`
 
 Example schema:
 
@@ -294,7 +294,7 @@ Put the encoder-reference offset in this map. Put a fixed URDF/DH transform offs
 
 **[Needs confirmation]** Verify `R` from the hardware/firmware definition. Some documentation uses the reciprocal ratio.
 
-### Step 0.5: Understand `s_i` versus encoder sign
+### [To verify] Step 0.5: Understand `s_i` versus encoder sign
 
 PSDM uses `s_i = +1` or `-1` inside its DH row. It determines whether an increasing canonical `q_i` increases the DH `theta_i` or `d_i` variable.
 
@@ -328,11 +328,11 @@ Before proceeding, verify for each axis:
 
 Do not continue while any sign is inferred rather than checked.
 
-## Phase 1: URDF to PSDM kinematics
+## [In progress] Phase 1: URDF to PSDM kinematics
 
 **Goal:** produce a validated standard-DH table that consumes the canonical link-side `q` from Phase 0.
 
-### Step 1.1: Parse the selected URDF chain
+### [x] Step 1.1: Parse the selected URDF chain
 
 A URDF describes a tree. PSDM requires the selected serial chain from a base link to a tool link.
 
@@ -349,7 +349,7 @@ Fixed joints are not ignored. Their transforms must be folded into the adjacent 
 
 **Output:** `urdf_kinematics.json`.
 
-### Step 1.2: What a URDF parser can and cannot generate
+### [x] Step 1.2: What a URDF parser can and cannot generate
 
 A parser can generate a candidate:
 
@@ -386,7 +386,7 @@ theta_i_star = theta_i + (1 - t_i) * s_i * q_i
 
 Use the standard-DH convention expected by PSDM. Do not put a modified-DH table directly into `PSDM.deriveModel`.
 
-### Step 1.4: Candidate-generation procedure
+### [x] Step 1.4: Candidate-generation procedure
 
 1. Select DH frames from the ordered serial chain.
 2. Encode fixed geometry in `a`, `alpha`, `d`, and `theta`.
@@ -397,7 +397,7 @@ Use the standard-DH convention expected by PSDM. Do not put a modified-DH table 
 
 
 
-### Step 1.5: Validate FK
+### [x] Step 1.5: Validate FK
 
 URDF-to-DH conversion is not unique. The proof that the selected table is usable is an FK comparison performed with the same canonical `q` values.
 
@@ -409,7 +409,7 @@ URDF-to-DH conversion is not unique. The proof that the selected table is usable
 
 Write results to `fk_validation_report.md`.
 
-### Step 1.6: MATLAB import check
+### [x] Step 1.6: MATLAB import check
 
 ```matlab
 S = load('dh_table.mat', 'DH');
@@ -420,13 +420,15 @@ assert(all(DH(:,5) == 0 | DH(:,5) == 1));
 assert(all(abs(DH(:,6)) == 1));
 ```
 
-**Gate 1:** FK validation passed. Do not derive a PSDM model before this result exists.
+**[PASSED] Gate 1:** FK validation passed. Do not derive a PSDM model before this result exists.
 
-## Phase 2: PSDM model derivation
+## [In progress] Phase 2: PSDM model derivation
 
 **Goal:** derive `E` and `P` from the approved DH table.
 
-### Step 2.1: Confirm the PSDM installation
+### [x] Step 2.1: Confirm the PSDM installation
+
+in a matlab command window, run:
 
 ```matlab
 which PSDM.deriveModel
@@ -435,19 +437,19 @@ help PSDM.deriveModel
 
 Record the checked-out repository commit hash with every model derivation.
 
-### Step 2.2: Optional inertial-structure mask `X`
+### [x] Step 2.2: Optional inertial-structure mask `X`
 
 `X` is a structural mask. A zero means that the corresponding inertial term is treated as absent in the derivation. It is not a fitted parameter vector.
 
 ```matlab
 n = size(DH, 1);
-X = ones(n, 10);
-X(:, 8:10) = 0;  % Use only when justified by independent evidence.
+X = ones(n, 11);
+X(:, 9:11) = 0;  % Use only when justified by independent evidence.
 ```
 
 An optional eleventh column may represent drive inertia or drive mass. Use it only after confirming how it is reflected into the output-joint coordinate.
 
-### Step 2.3: Derive the model
+### [ ] Step 2.3: Derive the model
 
 ```matlab
 [E, P] = PSDM.deriveModel(DH, g);
@@ -469,7 +471,7 @@ ell = size(P, 2);   % full-model base parameters
 
 `P` is a page matrix of size `p x ell x DOF`.
 
-### Step 2.4: Nominal parameter sanity check
+### [ ] Step 2.4: Nominal parameter sanity check
 
 When URDF inertial properties are trustworthy enough to use as a nominal reference:
 
@@ -479,7 +481,7 @@ When URDF inertial properties are trustworthy enough to use as a nominal referen
 
 This does not identify the real robot. It only gives a compatible PSDM parameter vector for a known hypothetical model.
 
-### Step 2.5: Optional complexity reduction
+### [ ] Step 2.5: Optional complexity reduction
 
 ```matlab
 % [Eh, Ph] = PSDM.reduceModelComplexity(E, P, DH, g, X, ...
@@ -488,7 +490,7 @@ This does not identify the real robot. It only gives a compatible PSDM parameter
 
 For prismatic axes, supply appropriate meter-based limits to any reduction study. Do not use angular default limits blindly.
 
-### Step 2.6: Sanity test
+### [ ] Step 2.6: Sanity test
 
 ```matlab
 n = size(DH, 1);
@@ -501,7 +503,7 @@ tau = PSDM.inverseDynamics(E, P, Theta_test, Q, Qd, Qdd);
 assert(isequal(size(tau), [n, 10]));
 ```
 
-**Gate 2A:** the model evaluates with link-side coordinates in the correct dimensions.
+**[ ] Gate 2A:** the model evaluates with link-side coordinates in the correct dimensions.
 
 ## Phase 3: Convert telemetry, collect data, and preprocess
 
