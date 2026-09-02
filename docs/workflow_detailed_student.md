@@ -133,11 +133,12 @@ project/
 For every axis, keep these names separate:
 
 
-| Layer           | Symbol  | Example unit   | Meaning                                            |
-| --------------- | ------- | -------------- | -------------------------------------------------- |
-| Drive telemetry | `c_i`   | encoder counts | What the motor drive reports.                      |
-| Motor shaft     | `phi_i` | rad            | Motor angle after count-to-angle conversion.       |
-| Kinematic joint | `q_i`   | rad or m       | Link-side generalized coordinate supplied to PSDM. |
+| Layer           | Symbol  | Example unit            | Meaning                                                 |
+| --------------- | ------- | ----------------------- | ------------------------------------------------------- |
+| Drive telemetry | `C_i`   | motor encoder counts    | What the motor drive reports.                           |
+| Drive telemetry | `Ca_i`  | absolute encoder counts | What the axis encoder reports (through the motor drive) |
+| Motor shaft     | `phi_i` | rad                     | Motor angle after count-to-angle conversion.            |
+| Kinematic joint | `q_i`   | rad or m                | Link-side generalized coordinate supplied to PSDM.     |
 
 
 A motor-side count is only equal to a kinematic joint coordinate when there is no transmission and the units already match. Your robot has transmissions, therefore you must implement the conversion.
@@ -251,7 +252,7 @@ For the vertical-slide example, write `child link translates along +Z_P3`. You m
 
 The direction of end-effector motion caused by a joint depends on the robot configuration. For a downstream prismatic joint, the base-frame direction of its local axis depends on preceding joints. You do not need to set other joints to zero to define `+q`. Define it locally. Use `q_ref` only when you want to report an illustrative base-frame direction.
 
-### [In progress] Step 0.4: Build `actuator_to_joint_map.yaml`
+### [X] Step 0.4: Build `actuator_to_joint_map.yaml`
 
 Example schema:
 
@@ -260,7 +261,8 @@ J1:
   joint_type: revolute
   encoder_counts_per_motor_rev: 1048576
   motor_revs_per_output_rev: 100
-  encoder_count_at_q_zero: 123456
+  absolute_encoder_count_per_q_unit: 2048
+  abosolute_encoder_count_at_q_zero: 123456
   q_offset_at_reference: 0.0
   encoder_to_q_sign: 1
 
@@ -269,30 +271,32 @@ P3:
   encoder_counts_per_motor_rev: 1048576
   motor_revs_per_output_rev: 50
   screw_lead_m_per_output_rev: 0.005
-  encoder_count_at_q_zero: 654321
+  absolute_encoder_count_per_q_unit: 4096000
+  absolute_encoder_count_at_q_zero: 654321
   q_offset_at_reference: 0.0
   encoder_to_q_sign: -1
 ```
 
 With:
-
-- `C` = encoder counts per motor revolution,
-- `R` = motor revolutions per output-shaft revolution,
-- `L` = screw lead in m per output-shaft revolution,
+- `Cm` = `encoder_counts_per_motor_rev`
+- `R` = `motor_revs_per_output_rev`,
+- `L` = `screw_lead_m_per_output_rev`,
+- `Ca_q` = `absolute_encoder_count_per_q_unit`
+- `Ca_q0` = `absolute_encoder_count_at_q_zero`
 - `sigma_enc` = `encoder_to_q_sign`,
+- `q_offset` = `q_offset_at_reference`
+- `Ca` = actual absolute encoder reading
 
 use:
 
 ```text
-revolute:  q = q_offset + sigma_enc * 2*pi*(c-c_ref)/(C*R)
-prismatic: q = q_offset + sigma_enc * L*(c-c_ref)/(C*R)
+q = q_offset + sigma_enc * (Ca-Ca_q0)/Ca_q
 ```
 
-Differentiate the converted `q`, not encoder counts, unless you first apply exactly the same conversion to the derivative signal.
+Differentiate the converted `q`, not absolute encoder counts, unless you first apply exactly the same conversion to the derivative signal.
 
 Put the encoder-reference offset in this map. Put a fixed URDF/DH transform offset in the DH constants. Do not put the same physical offset in both places.
 
-**[Needs confirmation]** Verify `R` from the hardware/firmware definition. Some documentation uses the reciprocal ratio.
 
 ### [To verify] Step 0.5: Understand `s_i` versus encoder sign
 
@@ -307,7 +311,7 @@ These are not interchangeable. Do not put a gearbox ratio in `s_i`, because `s_i
 **Raw file example:**
 
 ```text
-t, c1, c2, ..., cn, current1, current2, ..., currentn
+t, ca1, ca2, ..., can, current1, current2, ..., currentn
 ```
 
 **Processed PSDM file example:**
@@ -449,7 +453,7 @@ X(:, 9:11) = 0;  % Use only when justified by independent evidence.
 
 An optional eleventh column may represent drive inertia or drive mass. Use it only after confirming how it is reflected into the output-joint coordinate.
 
-### [ ] Step 2.3: Derive the model
+### [X] Step 2.3: Derive the model
 
 ```matlab
 [E, P] = PSDM.deriveModel(DH, g);
@@ -514,17 +518,9 @@ assert(isequal(size(tau), [n, 10]));
 Use `actuator_to_joint_map.yaml` before filtering or regression.
 
 ```matlab
-% Illustrative conversion for a revolute axis.
+% Illustrative conversion for both a revolute axis or a prismatic ball-screw axis: 
 q = q_offset + encoder_to_q_sign * ...
-    2*pi*(c - c_ref)/(counts_per_motor_rev*motor_revs_per_output_rev);
-```
-
-For a prismatic ball-screw axis:
-
-```matlab
-q = q_offset + encoder_to_q_sign * ...
-    screw_lead_m_per_output_rev*(c - c_ref) / ...
-    (counts_per_motor_rev*motor_revs_per_output_rev);
+    (ca - absolute_encoder_count_at_q_zero)/(absolute_encoder_count_per_q_unit);
 ```
 
 Use the same scale and sign when converting a drive-provided count-rate signal. Prefer filtering and numerical differentiation after `q` is in rad or m.

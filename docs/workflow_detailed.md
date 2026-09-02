@@ -110,6 +110,7 @@ Use three distinct variable names throughout the project:
 | Layer | Symbol | Unit | Meaning |
 |---|---|---|---|
 | Raw telemetry | `c_i` | counts | Motor-drive encoder position. |
+| Raw telemetry | `ca_i` | counts | axis absolute encoder position. |
 | Optional motor coordinate | `phi_i` | rad | Motor-shaft coordinate derived from `c_i`. |
 | PSDM coordinate | `q_i` | rad or m | Link-side generalized coordinate. |
 
@@ -165,7 +166,8 @@ J1:
   joint_type: revolute
   encoder_counts_per_motor_rev: [value]
   motor_revs_per_output_rev: [value]
-  encoder_count_at_q_zero: [value]
+  absolute_encoder_count_per_q_unit: [value]
+  absolute_encoder_count_at_q_zero: [value]
   q_offset_at_reference: 0.0
   encoder_to_q_sign: 1
 P3:
@@ -173,32 +175,21 @@ P3:
   encoder_counts_per_motor_rev: [value]
   motor_revs_per_output_rev: [value]
   screw_lead_m_per_output_rev: [value]
-  encoder_count_at_q_zero: [value]
+  absolute_encoder_count_per_q_unit: [value]
+  absolute_encoder_count_at_q_zero: [value]
   q_offset_at_reference: 0.0
   encoder_to_q_sign: 1
 ```
 
-With `C_i` defined as encoder counts per motor revolution and `R_i` defined as motor revolutions per output-shaft revolution, the nominal map is:
+With `Ca_q_i` defined as absolute encoder counts per q unit (either rad or m), `Ca_q0_i` defined as the absolute reading at q = 0 and `ca_i` being the actual reading of the absolute encoder, the nominal map is:
 
 ```text
-phi_i   = 2*pi * (c_i - c_ref_i) / C_i
-
-revolute:  q_i = q_offset_i + sigma_enc_i * phi_i / R_i
-prismatic: q_i = q_offset_i + sigma_enc_i * lead_i * phi_i / (2*pi*R_i)
-```
-
-Equivalently:
-
-```text
-revolute:  q_i = q_offset_i + sigma_enc_i * 2*pi*(c_i-c_ref_i)/(C_i*R_i)
-prismatic: q_i = q_offset_i + sigma_enc_i * lead_i*(c_i-c_ref_i)/(C_i*R_i)
+q_i = q_offset_i + sigma_enc_i * (ca_i - Ca_q0_i)/Ca_q_i
 ```
 
 `qdot_i` and `qddot_i` are obtained from the same physical map. Apply the conversion before engineering-limit checks and before PSDM regression. Prefer filtering and numerical differentiation in canonical joint units.
 
 A constant encoder-reference offset belongs in this actuator-to-joint map. A fixed kinematic offset between URDF/DH frames belongs in the DH constants. Do not encode the same physical offset in both locations.
-
-**[Needs confirmation]** Ratio direction, sign, and ball-screw lead definition must be verified against mechanics and firmware. A ratio defined as output revolutions per motor revolution requires the reciprocal of `R_i` above.
 
 ### Step 0.5: Separate telemetry sign from DH sign
 
@@ -216,8 +207,8 @@ Do not use both signs to compensate the same reversal. The required FK check ver
 | Field | Unit | Description |
 |---|---|---|
 | `t` | s | Monotonic timestamp. |
-| `c_1..c_n` | counts | Raw encoder positions at motor drive. |
-| `cdot_1..cdot_n` | counts/s, optional | Raw drive velocity if exported. |
+| `ca_1..ca_n` | counts | absolute encoder positions of axis. |
+| `cadot_1..cadot_n` | counts/s, optional | absolute  drive velocity if exported. |
 | `i_1..i_n` | A | Signed motor current. |
 | `cycle_dt_nominal` | s | Nominal cycle period. |
 | `cycle_dt_measured` | s | Measured `t[k] - t[k-1]`. |
@@ -423,7 +414,7 @@ assert(isequal(size(tau), [n, 10]));
 
 Apply the approved `actuator_to_joint_map.yaml` to every raw log.
 
-1. Convert counts `c` to canonical link-side `q` using Step 0.4.
+1. Convert counts `ca` to canonical link-side `q` using Step 0.4.
 2. Apply the same conversion to drive-provided velocity only when its signal is demonstrably derived from the same encoder and timestamp base.
 3. Filter and differentiate canonical `q` when drive velocity or acceleration does not meet the signal-quality requirement.
 4. Retain raw signals in the processed dataset only as traceability fields. Do not feed them to PSDM.
