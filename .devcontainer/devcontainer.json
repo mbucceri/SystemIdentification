@@ -1,0 +1,39 @@
+{
+    "name": "SystemIdentification Development",
+
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "..",
+        "args": {
+            "USERNAME": "vscode",
+            "USER_UID": "1000",
+            "USER_GID": "1000"
+        }
+    },
+
+    "remoteUser": "vscode",
+
+    "workspaceFolder": "/workspace/SystemIdentification",
+
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/workspace/SystemIdentification,type=bind,consistency=cached"
+    ],
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "ms-python.python"
+            ],
+            "settings": {
+                "cmake.generator": "Ninja"
+            }
+        }
+    },
+
+    "containerEnv": {
+        "CC": "gcc",
+        "CXX": "g++"
+    }
+}
