@@ -19,6 +19,21 @@
         "source=${localWorkspaceFolder},target=/workspace/SystemIdentification,type=bind,consistency=cached"
     ],
 
+    // To avoid simple commands such as sed, awk, and grep to fail with "Operation not permitted" errors, 
+    // even if the config.tmoml file is set to allow them (sandbox_mode = "workspace-write"), we need to 
+    // relax the AppArmor profile as well.
+    // Codex uses Bubblewrap to create an inner workspace sandbox.
+    // Docker's default seccomp and AppArmor policies prevent the nested
+    // namespace/mount-propagation operations required by Bubblewrap.
+    // Relax only those outer policies; the container remains non-privileged
+    // and does not expose the Docker socket, host devices, or host home.
+    "runArgs": [
+        "--security-opt",
+        "seccomp=unconfined",
+        "--security-opt",
+        "apparmor=unconfined"
+    ],
+
     "customizations": {
         "vscode": {
             "extensions": [
