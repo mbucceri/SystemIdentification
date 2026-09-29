@@ -363,3 +363,67 @@ The first timing target is a configurable ±100 µs tolerance around the nominal
 
 The remaining timing semantics and low-level EtherCAT/platform choices are intentionally deferred to H2, where they will be resolved through measurement rather than assumption.
 
+
+
+## 11. H1 Closure and Transition to H2
+
+H1 — Requirements Elicitation is considered complete.
+
+The project now has a sufficiently explicit requirements baseline covering the system purpose, EtherCAT role, DS402 operation modes, experiment lifecycle, configuration inputs, safety behavior, timing targets, MCAP recording, external interfaces, non-functional constraints, and verification strategy.
+
+Residual questions remain active by design, but they no longer prevent platform investigation. These include detailed WKC/link-loss behavior, exact emergency-output mapping, current-feedback PDO selection, trajectory serialization, XML schemas, detailed state-machine timeout policy, and other low-level design choices.
+
+The next milestone is H2 — Platform Investigation.
+
+### 11.1 H2 objective
+
+H2 establishes an evidence-based Linux real-time and IgH/EtherLab platform baseline before application architecture is finalized.
+
+The principal questions are:
+
+1. Which Linux kernel/runtime configuration is appropriate for the 1 ms cycle and configurable ±100 µs timing target?
+2. Is PREEMPT_RT required?
+3. Which IgH/EtherLab release and build strategy should be baselined?
+4. Which NIC and EtherCAT driver strategy should be adopted?
+5. Which scheduler, CPU-affinity, IRQ-affinity, memory-locking, and power-management settings materially affect timing?
+6. What timing performance is demonstrated on the actual target platform?
+
+### 11.2 Agentic workflow introduced in H2
+
+H2 is also the first milestone in which the project deliberately separates two AI roles.
+
+**ChatGPT discussion/reasoning role**
+
+Used for:
+- requirements interpretation;
+- experiment design;
+- trade-off analysis;
+- deciding what evidence is required;
+- reviewing results and identifying the next bounded task;
+- maintaining the dissertation-level narrative.
+
+**Codex repository agent role**
+
+Used for:
+- inspecting the local repository and target-related files;
+- creating bounded investigation scripts and utilities;
+- modifying project documentation in the repository;
+- executing builds and deterministic checks;
+- collecting reproducible command output;
+- implementing approved H2 experiments.
+
+The transition between the two is task-based rather than milestone-based. A task should move to Codex when successful completion requires direct repository inspection, file modification, command execution, build/test execution, or reproducible local evidence. Conceptual decisions and interpretation can remain in ChatGPT until they have been converted into a bounded execution task.
+
+### 11.3 H2 harness evolution
+
+No separate autonomous multi-agent framework is required at the start of H2.
+
+The existing harness already contains the minimum useful agentic loop:
+
+1. human + ChatGPT define a bounded investigation;
+2. Codex executes it inside the controlled workspace;
+3. deterministic commands produce evidence;
+4. ChatGPT and/or an independent Codex review pass interpret the evidence;
+5. accepted results are documented and committed.
+
+H2 will use this loop deliberately and progressively. Additional agent roles, graph tools, or automation should be introduced only when a concrete limitation of the baseline workflow is observed and can be measured.
