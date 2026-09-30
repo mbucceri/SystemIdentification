@@ -1,3 +1,7 @@
 **/__pycache__/*
 /build/
 *.swp
+
+# avoid storing sensitive data in the repository
+**/collectedData/*
+
