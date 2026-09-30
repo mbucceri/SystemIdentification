@@ -2,7 +2,7 @@
 
 **Project:** SystemIdECMaster  
 **Status:** Active  
-**Predecessor:** H1 — Requirements Elicitation
+**Predecessor:** H1 — Requirements Elicitation (completed)
 
 ## Objective
 
